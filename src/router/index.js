@@ -6,7 +6,7 @@ import PhoneVerification from "../pages/PhoneVerification.vue";
 import OTPVerification from "../pages/OTPVerification.vue";
 import CompleteProfile from "../pages/CompleteProfile.vue";
 import RegistrationComplete from "../pages/RegistrationComplete.vue";
-import Homepage from "../pages/Homepage.vue";
+import Homepage from "../pages/HomePage.vue";
 import Profile from "../pages/Profile.vue";
 
 const routes = [
