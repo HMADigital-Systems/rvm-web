@@ -34,6 +34,11 @@ export async function syncUser(phone, nickname = "", avatarUrl = "") {
   });
 }
 
+export async function registerUserWithAutoGCM(token, phone, nickname = "", avatarUrl = "") {
+  // We ignore 'token' just like before, and call syncUser
+  return await syncUser(phone, nickname, avatarUrl);
+}
+
 // ✅ 2. Get User Records
 export async function getUserRecords(phone, pageNum = 1, pageSize = 10) {
   // Doc: 4 查询垃圾投放记录
