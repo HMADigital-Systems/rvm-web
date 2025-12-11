@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import Navbar from "../components/Navbar.vue";
+import Navbar from "../components/NavBar.vue";
 import RVMCard from "../components/RVMCard.vue";
 import UserGreeting from "../components/UserGreeting.vue";
 import { Recycle } from "lucide-vue-next";
