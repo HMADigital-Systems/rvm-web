@@ -60,7 +60,6 @@ const moveToPrev = (index, event) => {
 
 const verifyOTP = async () => {
   const code = otp.value.join("");
-
   if (code.length !== 6) return alert("Please enter complete OTP.");
 
   try {
@@ -69,35 +68,36 @@ const verifyOTP = async () => {
       return;
     }
 
+    // 1. Verify with Firebase
     const result = await window.confirmationResult.confirm(code);
     const firebaseUser = result.user;
 
-    // --- ⭐ FINAL FIX: MATCH POSTMAN FORMAT ---
-    let rawPhone = firebaseUser.phoneNumber; // e.g., +60149607561
+    // 2. Format the Real Malaysian Number
+    let rawPhone = firebaseUser.phoneNumber; // e.g. +60149607561
+    let finalPhone = rawPhone.replace('+60', '0'); // e.g. 0149607561
 
-    // Convert +60149607561 -> 0149607561
-    // This matches exactly what worked in your Postman test.
-    let finalPhoneToSend = rawPhone.replace('+60', '0');
+    console.log("✅ Firebase Verified:", finalPhone);
 
-    console.log("Sending to API:", finalPhoneToSend);
-    // ------------------------------------------
+    // 3. Register/Sync with AutoGCM
+    // 🟢 REVERTED: Sending pure Malaysian number
+    const response = await registerUserWithAutoGCM("", finalPhone, "");
 
-    const response = await registerUserWithAutoGCM("", finalPhoneToSend, "");
-
-    console.log("AutoGCM API response:", response);
+    console.log("AutoGCM Response:", response);
 
     if (response.code !== 200) {
-      alert("AutoGCM error: " + response.msg);
+      // NOTE: This is where "Please enter correct mobile number" will appear 
+      // if the API refuses the format for NEW users.
+      alert("AutoGCM Error: " + response.msg);
       return;
     }
 
-    const userData = response.data;
-    localStorage.setItem("autogcmUser", JSON.stringify(userData));
+    // ✅ Success: Save the data exactly as returned
+    localStorage.setItem("autogcmUser", JSON.stringify(response.data));
 
-    if (userData.isNewUser === 0) {
+    if (response.data.isNewUser === 0) {
       router.push("/home-page");
     } else {
-      localStorage.setItem("pendingPhoneVerified", finalPhoneToSend);
+      localStorage.setItem("pendingPhoneVerified", finalPhone);
       router.push("/complete-profile");
     }
 

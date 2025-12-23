@@ -8,6 +8,8 @@ import CompleteProfile from "../pages/CompleteProfile.vue";
 import RegistrationComplete from "../pages/RegistrationComplete.vue";
 import Homepage from "../pages/HomePage.vue";
 import Profile from "../pages/Profile.vue";
+import UserDashboard from "../pages/UserDashboard.vue";
+import WithdrawPage from "../pages/WithdrawPage.vue";
 
 const routes = [
   { path: "/", component: Welcome },
@@ -19,6 +21,8 @@ const routes = [
   { path: "/register-success", component: RegistrationComplete},
   { path: "/home-page", component: Homepage},
   { path: "/profile", component: Profile},
+  { path: "/dashboard", component: UserDashboard },
+  { path: "/withdraw", component: WithdrawPage },
 
 ];
 

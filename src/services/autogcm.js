@@ -1,9 +1,7 @@
 import axios from "axios";
 
-// If running locally, point to local Vercel; if prod, point to real URL
-const PROXY_URL = import.meta.env.DEV 
-  ? '/api/proxy' 
-  : '/api/proxy'; 
+// 🟢 VITE PROXY: Points to relative path so vite.config.js handles the forwarding
+const PROXY_URL = '/api/proxy';
 
 // Generic Wrapper
 async function callApi(endpoint, method = 'GET', data = {}) {
@@ -14,8 +12,6 @@ async function callApi(endpoint, method = 'GET', data = {}) {
       [method === 'GET' ? 'params' : 'body']: data
     };
     
-    // We send a POST to our proxy regardless of the final method
-    // The proxy handles the real switching.
     const res = await axios.post(PROXY_URL, payload);
     return res.data; 
   } catch (error) {
@@ -26,24 +22,26 @@ async function callApi(endpoint, method = 'GET', data = {}) {
 
 // ✅ 1. Register / Sync User
 export async function syncUser(phone, nickname = "", avatarUrl = "") {
-  // Doc: 12 注册用户(信息同步)
+  
+  // 🟢 REVERTED: Send phone exactly as provided (e.g. "0149607561")
+  console.log(`📡 Syncing User: "${phone}"`);
+
   return await callApi('/api/open/v1/user/account/sync', 'POST', {
-    phone,
-    nikeName: nickname, // Note: API uses 'nikeName' typo as per doc
+    phone: phone,
+    nikeName: nickname, // API typo 'nikeName' is required
     avatarUrl
   });
 }
 
+// Alias for registration flow
 export async function registerUserWithAutoGCM(token, phone, nickname = "", avatarUrl = "") {
-  // We ignore 'token' just like before, and call syncUser
   return await syncUser(phone, nickname, avatarUrl);
 }
 
 // ✅ 2. Get User Records
 export async function getUserRecords(phone, pageNum = 1, pageSize = 10) {
-  // Doc: 4 查询垃圾投放记录
   return await callApi('/api/open/v1/put', 'GET', {
-    phone,
+    phone: phone,
     pageNum,
     pageSize
   });
@@ -51,36 +49,85 @@ export async function getUserRecords(phone, pageNum = 1, pageSize = 10) {
 
 // ✅ 3. Get Nearby RVMs
 export async function getNearbyRVMs(latitude, longitude) {
-  // Doc: 10 获取附近的设备
   return await callApi('/api/open/video/v2/nearby', 'GET', {
     latitude,
     longitude
   });
 }
 
-// ✅ 4. Get Machine Config (Compartments)
+// ✅ 4. Get Machine Config
 export async function getMachineConfig(deviceNo) {
-  // Doc: 2 获取仓位配置
   return await callApi('/api/open/v1/device/position', 'GET', {
     deviceNo
   });
 }
 
-// ✅ 5. Open Rubbish Port (NEW - Added based on PDF)
+// ✅ 5. Open Rubbish Port
 export async function openRubbishPort(deviceNo, phone, positionNo) {
-  // Doc: 3 选择开启垃圾投口
   return await callApi('/api/open/v1/open', 'POST', {
     deviceNo,
-    phone,
-    positionNo: parseInt(positionNo) // Ensure int
+    phone: phone,
+    positionNo: parseInt(positionNo)
   });
 }
 
-// ✅ 6. Bind Card (NEW - Added based on PDF)
+// ✅ 6. Bind Card
 export async function bindCard(deviceNo, phone) {
-  // Doc: 11 二维码授权绑卡
   return await callApi('/api/open/v1/code/auth/bindCard', 'GET', {
     deviceNo,
-    phone
+    phone: phone
   });
+} 
+
+  // ✅ 7. Update User Profile (Nickname & Avatar)
+// Uses the same 'sync' endpoint. We just send the same phone with NEW data.
+export async function updateUserProfile(phone, newNickname, newAvatarUrl) {
+  // Ensure we don't accidentally wipe data if one field is empty
+  if (!phone) throw new Error("Phone number is required for update");
+  
+  return await callApi('/api/open/v1/user/account/sync', 'POST', {
+    phone: phone, // The key to identify the user
+    nikeName: newNickname, 
+    avatarUrl: newAvatarUrl
+  });
+}
+
+// ✅ 8. Get Public Machine Records (For Global Dashboard)
+// Queries the recycling history of a specific machine, not a specific user.
+export async function getMachinePublicRecords(deviceNo, pageNum = 1, pageSize = 20) {
+  return await callApi('/api/open/v1/put', 'GET', {
+    deviceNo: deviceNo, // Filter by Machine
+    pageNum,
+    pageSize
+    // Note: We deliberately omit 'phone' to get ALL users' data for this machine
+  });
+}
+
+// ✅ 9. Get User Stats (Calculated)
+// Fetches user history and calculates totals (API doesn't give totals directly)
+export async function getUserStats(phone) {
+  try {
+    // Fetch last 100 records (limit to avoid heavy load)
+    const res = await getUserRecords(phone, 1, 100);
+    
+    if (res.code === 200 && res.data && res.data.list) {
+      const records = res.data.list;
+      
+      // Calculate Totals
+      const totalWeight = records.reduce((sum, item) => sum + (item.weight || 0), 0);
+      const totalPoints = records.reduce((sum, item) => sum + (item.integral || 0), 0);
+      const totalItems = records.length;
+      
+      return {
+        totalWeight: totalWeight.toFixed(2),
+        totalPoints: totalPoints.toFixed(2),
+        totalItems,
+        recentHistory: records.slice(0, 5) // Top 5 recent items
+      };
+    }
+    return { totalWeight: 0, totalPoints: 0, totalItems: 0, recentHistory: [] };
+  } catch (err) {
+    console.error("Failed to calculate stats:", err);
+    return null;
+  }
 }

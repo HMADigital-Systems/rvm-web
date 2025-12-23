@@ -18,14 +18,36 @@
     </section>
 
     <section class="flex justify-center mt-6">
-      <div class="bg-white shadow rounded-2xl p-4 w-11/12 max-w-md text-gray-700 grid grid-cols-2 gap-4 text-center">
-        <div>
-          <p class="font-semibold text-lg text-green-700">{{ user.totalWeight }}kg</p>
-          <p class="text-sm">Total Delivered Weight</p>
+      <div 
+        class="bg-white shadow rounded-2xl p-4 w-11/12 max-w-md text-gray-700 grid grid-cols-2 gap-4 text-center items-stretch"
+      >
+        <div 
+          @click="$router.push('/dashboard')"
+          class="flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform hover:bg-gray-50 rounded-xl py-4 h-full"
+        >
+          <div class="flex flex-col items-center">
+            <p v-if="user.totalWeight !== null" class="font-bold text-xl text-green-700">
+              {{ user.totalWeight }}kg
+            </p>
+            <div v-else class="h-7 w-20 bg-gray-200 animate-pulse rounded mb-1"></div>
+            
+            <p class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Total Delivered Weight</p>
+          </div>
         </div>
-        <div>
-          <p class="font-semibold text-lg text-green-700">RM {{ user.balance }}</p>
-          <p class="text-sm">Account Balance</p>
+        
+        <div 
+           @click="$router.push('/withdraw')"
+           class="flex flex-col items-center justify-between cursor-pointer active:scale-95 transition-transform hover:bg-gray-50 rounded-xl py-4 h-full"
+        >
+           <div class="flex flex-col items-center mb-1">
+             <p class="font-bold text-xl text-green-700">{{ user.balance }} pts</p>
+             <p class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Balance</p>
+           </div>
+
+           <div class="mt-2 bg-amber-50 text-amber-600 text-[10px] px-3 py-1 rounded-full border border-amber-100 flex items-center shadow-sm">
+              <span :class="{'animate-pulse': user.pendingEarnings > 0}" class="mr-1 text-xs">●</span> 
+              +{{ user.pendingEarnings || 0 }} pending
+           </div>
         </div>
       </div>
     </section>
@@ -35,20 +57,28 @@
         <div class="flex items-center space-x-2">
           <Recycle class="w-5 h-5 text-green-600" />
           <h3 class="text-lg font-semibold text-green-700">Nearby Stations</h3>
-          <span class="text-sm text-gray-500">({{ rvmList.length }})</span>
+          <span v-if="!isLoading" class="text-sm text-gray-500">({{ rvmList.length }})</span>
         </div>
       </div>
 
-      <div class="flex overflow-x-auto space-x-4 pb-3">
-        <RVMCard
-          v-for="rvm in rvmList"
-          :key="rvm.deviceNo"
-          :deviceNo="rvm.deviceNo"
-          :status="rvm.status"
-          :distance="rvm.distance"
-          :address="rvm.address"
-          :compartments="rvm.compartments"
-        />
+      <div class="flex overflow-x-auto space-x-4 pb-3 scrollbar-hide">
+        
+        <template v-if="isLoading">
+           <RVMCardSkeleton v-for="n in 3" :key="n" />
+        </template>
+
+        <template v-else>
+          <RVMCard
+            v-for="rvm in rvmList"
+            :key="rvm.deviceNo"
+            :deviceNo="rvm.deviceNo"
+            :status="rvm.status"
+            :distance="rvm.distance"
+            :address="rvm.address"
+            :compartments="rvm.compartments"
+          />
+        </template>
+
       </div>
     </section>
 
@@ -59,6 +89,7 @@
 <script setup>
 import Navbar from "../components/NavBar.vue";
 import RVMCard from "../components/RVMCard.vue";
+import RVMCardSkeleton from "../components/RVMCardSkeleton.vue"; 
 import UserGreeting from "../components/UserGreeting.vue";
 import { Recycle } from "lucide-vue-next";
 import { Swiper, SwiperSlide } from "swiper/vue";
@@ -66,9 +97,7 @@ import { Autoplay, Pagination } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/pagination";
 
-// ⭐ Import the logic from the new file
 import { useHomeLogic } from "../composables/useHomeLogic.js";
 
-// Execute logic
-const { user, rvmList, sliderImages } = useHomeLogic();
+const { user, rvmList, sliderImages, isLoading } = useHomeLogic();
 </script>

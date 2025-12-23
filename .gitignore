@@ -31,3 +31,6 @@ node_modules
 
 # Firebase logs
 firebase-debug.log
+
+.vercel
+.env*.local

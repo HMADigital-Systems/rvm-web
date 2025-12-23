@@ -4,7 +4,6 @@
     <h2 class="text-2xl font-bold text-green-700 mb-2">Welcome Back</h2>
     <p class="text-gray-500 mb-6 text-center">Login to continue recycling smarter.</p>
 
-    <!-- ✅ Google OAuth -->
     <button class="gsi-material-button" @click="handleGoogleLogin">
       <div class="gsi-material-button-content-wrapper">
         <div class="gsi-material-button-icon">
@@ -47,44 +46,40 @@ const initGoogleClient = () => {
         const googleToken = response.access_token;
         localStorage.setItem("googleToken", googleToken);
 
-        // ✅ Get Google basic profile info
+        // 1. Get Google Profile
         const userInfo = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
           headers: { Authorization: `Bearer ${googleToken}` },
         }).then((r) => r.json());
 
-        const nickname = userInfo.name || "User";
-        const avatar = userInfo.picture || "https://lassification.oss-cn-shenzhen.aliyuncs.com/static/mini/imgv3/head.png";
+        const googleNick = userInfo.name || "User";
+        const googleAvatar = userInfo.picture || "";
 
-        // ✅ Get locally saved phone if exists
+        // 2. Save Google info temporarily
+        localStorage.setItem("tempGoogleUser", JSON.stringify({ 
+            nickname: googleNick, 
+            avatar: googleAvatar 
+        }));
+
+        // 3. Check for existing phone login
         const existingUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
         const phone = existingUser.phone || "";
 
-        let res;
-
         if (phone) {
-          // 🟢 Try syncing existing user
-          res = await syncUser(phone, nickname, avatar);
-          console.log("AutoGCM sync response:", res);
-
+          // 🟢 REVERTED: Just send the phone.
+          // We send "" for nickname/avatar to be safe (don't overwrite existing profile).
+          // If the user already exists, the API should return their record.
+          const res = await syncUser(phone, "", ""); 
+          
           if (res.code === 200 && res.data) {
-            // 🧠 Check if user is new or existing
-            if (res.data.isNewUser === 1) {
-              console.log("🆕 New user detected — redirecting to verify phone.");
-              localStorage.setItem("tempGoogleUser", JSON.stringify({ nickname, avatar }));
-              router.push("/verify-phone");
-              return;
-            }
-
-            // ✅ Existing user — save info and go to homepage
             localStorage.setItem("autogcmUser", JSON.stringify(res.data));
             router.push("/home-page");
           } else {
-            alert("Login failed: " + (res.msg || "Unknown error"));
+             // If API fails (e.g. invalid format), user must verify phone again
+             alert("Login failed: " + (res.msg || "Unknown error"));
           }
         } else {
-          // 🔄 No local phone — treat as new user
+          // No phone saved locally -> Treat as fresh login
           console.log("⚠️ No phone detected, redirecting to verify phone.");
-          localStorage.setItem("tempGoogleUser", JSON.stringify({ nickname, avatar }));
           router.push("/verify-phone");
         }
       } catch (err) {
@@ -97,7 +92,7 @@ const initGoogleClient = () => {
 
 const handleGoogleLogin = () => {
   if (!client) {
-    alert("Google login is not ready yet. Please try again in a moment.");
+    alert("Google login is not ready yet.");
     return;
   }
   client.requestAccessToken();
