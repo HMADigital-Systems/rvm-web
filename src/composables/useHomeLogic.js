@@ -188,12 +188,12 @@ export function useHomeLogic() {
         if (dbUser) {
            const { data: submissions } = await supabase
              .from('submission_reviews')
-             .select('calculated_points')
+             .select('machine_given_points')
              .eq('user_id', dbUser.id)
              .eq('status', 'PENDING'); // Only look for unapproved items
            
            // Sum them up
-           const incoming = submissions?.reduce((sum, s) => sum + Number(s.calculated_points), 0) || 0;
+           const incoming = submissions?.reduce((sum, s) => sum + Number(s.s.machine_given_points), 0) || 0;
            user.value.pendingEarnings = incoming.toFixed(2);
         }
 

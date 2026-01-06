@@ -22,10 +22,7 @@ async function callApi(endpoint, method = 'GET', data = {}) {
 
 // ✅ 1. Register / Sync User
 export async function syncUser(phone, nickname = "", avatarUrl = "") {
-  
-  // 🟢 REVERTED: Send phone exactly as provided (e.g. "0149607561")
   console.log(`📡 Syncing User: "${phone}"`);
-
   return await callApi('/api/open/v1/user/account/sync', 'POST', {
     phone: phone,
     nikeName: nickname, // API typo 'nikeName' is required
@@ -79,55 +76,66 @@ export async function bindCard(deviceNo, phone) {
   });
 } 
 
-  // ✅ 7. Update User Profile (Nickname & Avatar)
-// Uses the same 'sync' endpoint. We just send the same phone with NEW data.
+// ✅ 7. Update User Profile
 export async function updateUserProfile(phone, newNickname, newAvatarUrl) {
-  // Ensure we don't accidentally wipe data if one field is empty
   if (!phone) throw new Error("Phone number is required for update");
-  
   return await callApi('/api/open/v1/user/account/sync', 'POST', {
-    phone: phone, // The key to identify the user
+    phone: phone,
     nikeName: newNickname, 
     avatarUrl: newAvatarUrl
   });
 }
 
-// ✅ 8. Get Public Machine Records (For Global Dashboard)
-// Queries the recycling history of a specific machine, not a specific user.
+// ✅ 8. Get Public Machine Records
 export async function getMachinePublicRecords(deviceNo, pageNum = 1, pageSize = 20) {
   return await callApi('/api/open/v1/put', 'GET', {
-    deviceNo: deviceNo, // Filter by Machine
+    deviceNo: deviceNo,
     pageNum,
     pageSize
-    // Note: We deliberately omit 'phone' to get ALL users' data for this machine
   });
 }
 
-// ✅ 9. Get User Stats (Calculated)
-// Fetches user history and calculates totals (API doesn't give totals directly)
+// 9. Get User Stats
 export async function getUserStats(phone) {
   try {
-    // Fetch last 100 records (limit to avoid heavy load)
     const res = await getUserRecords(phone, 1, 100);
-    
     if (res.code === 200 && res.data && res.data.list) {
       const records = res.data.list;
-      
-      // Calculate Totals
       const totalWeight = records.reduce((sum, item) => sum + (item.weight || 0), 0);
       const totalPoints = records.reduce((sum, item) => sum + (item.integral || 0), 0);
       const totalItems = records.length;
-      
       return {
         totalWeight: totalWeight.toFixed(2),
         totalPoints: totalPoints.toFixed(2),
         totalItems,
-        recentHistory: records.slice(0, 5) // Top 5 recent items
+        recentHistory: records.slice(0, 5)
       };
     }
     return { totalWeight: 0, totalPoints: 0, totalItems: 0, recentHistory: [] };
   } catch (err) {
     console.error("Failed to calculate stats:", err);
+    return null;
+  }
+}
+
+// NEW: Onboarding / Migration Helper
+export async function runOnboarding(phone) {
+  try {
+    // Ensure this URL matches your Backend deployment
+    const BACKEND_URL = "https://rvm-merchant-platform.vercel.app/api/onboard"; 
+    
+    console.log("🔄 Triggering User Migration...");
+    const response = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone })
+    });
+    
+    const result = await response.json();
+    console.log("✅ Migration Result:", result);
+    return result;
+  } catch (error) {
+    console.error("⚠️ Migration trigger failed:", error);
     return null;
   }
 }

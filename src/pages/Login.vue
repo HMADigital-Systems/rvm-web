@@ -20,7 +20,9 @@
 <script setup>
 import { onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { syncUser } from "../services/autogcm.js";
+// 🟢 FIXED IMPORTS: Combined into one line
+import { syncUser, runOnboarding } from "../services/autogcm.js";
+import { getOrCreateUser } from "../services/supabase.js";
 
 const router = useRouter();
 let client = null;
@@ -65,16 +67,19 @@ const initGoogleClient = () => {
         const phone = existingUser.phone || "";
 
         if (phone) {
-          // 🟢 REVERTED: Just send the phone.
-          // We send "" for nickname/avatar to be safe (don't overwrite existing profile).
-          // If the user already exists, the API should return their record.
           const res = await syncUser(phone, "", ""); 
           
           if (res.code === 200 && res.data) {
             localStorage.setItem("autogcmUser", JSON.stringify(res.data));
+            
+            // 🟢 1. Create User in Supabase (Safety)
+            await getOrCreateUser(phone, res.data.nikeName, res.data.avatarUrl);
+
+            // 🟢 2. Run Onboarding (Fixes the Points)
+            await runOnboarding(phone);
+
             router.push("/home-page");
           } else {
-             // If API fails (e.g. invalid format), user must verify phone again
              alert("Login failed: " + (res.msg || "Unknown error"));
           }
         } else {

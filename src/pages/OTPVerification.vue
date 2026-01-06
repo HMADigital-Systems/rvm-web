@@ -36,7 +36,9 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { registerUserWithAutoGCM } from "../services/autogcm.js";
+// 🟢 FIXED IMPORTS: Combined into one line
+import { registerUserWithAutoGCM, runOnboarding } from "../services/autogcm.js";
+import { getOrCreateUser } from "../services/supabase.js";
 import { auth } from "../firebase.js";
 
 const router = useRouter();
@@ -79,20 +81,23 @@ const verifyOTP = async () => {
     console.log("✅ Firebase Verified:", finalPhone);
 
     // 3. Register/Sync with AutoGCM
-    // 🟢 REVERTED: Sending pure Malaysian number
     const response = await registerUserWithAutoGCM("", finalPhone, "");
 
     console.log("AutoGCM Response:", response);
 
     if (response.code !== 200) {
-      // NOTE: This is where "Please enter correct mobile number" will appear 
-      // if the API refuses the format for NEW users.
       alert("AutoGCM Error: " + response.msg);
       return;
     }
 
-    // ✅ Success: Save the data exactly as returned
+    // Success: Save the data exactly as returned
     localStorage.setItem("autogcmUser", JSON.stringify(response.data));
+
+    // 1. Create User in Supabase
+    await getOrCreateUser(finalPhone, "New User", "");
+
+    // 2. Run Onboarding
+    await runOnboarding(finalPhone);
 
     if (response.data.isNewUser === 0) {
       router.push("/home-page");
