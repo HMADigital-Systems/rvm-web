@@ -22,7 +22,7 @@ export async function getOrCreateUser(phone, nickname = '', avatar = '') {
       .from('users')
       .select('id, lifetime_integral')
       .eq('phone', phone)
-      .single();
+      .maybeSingle();
 
     // 2. If found, return ID
     if (data) return data;
