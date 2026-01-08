@@ -20,14 +20,17 @@
         />
       </div>
 
-      <button @click="verifyOTP" 
-        class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-medium">
-        Verify OTP
+      <button @click="verifyOTP" :disabled="isLoading"
+        class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50">
+        <span v-if="isLoading">Verifying...</span>
+        <span v-else>Verify OTP</span>
       </button>
 
       <button @click="router.push('/verify-phone')" class="mt-4 text-sm text-green-600 hover:underline">
         Wrong number? Go back
       </button>
+
+      <p v-if="errorMessage" class="mt-4 text-sm text-red-500">{{ errorMessage }}</p>
 
     </div>
   </div>
@@ -36,17 +39,17 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-// 🟢 FIXED IMPORTS: Combined into one line
 import { registerUserWithAutoGCM, runOnboarding } from "../services/autogcm.js";
 import { getOrCreateUser } from "../services/supabase.js";
-import { auth } from "../firebase.js";
 
 const router = useRouter();
 const otp = ref(["", "", "", "", "", ""]);
+const isLoading = ref(false);
+const errorMessage = ref("");
 
 onMounted(() => {
   if (!window.confirmationResult) {
-    alert("Session expired. Please verify phone again.");
+    // alert("Session expired. Please verify phone again.");
     router.push("/verify-phone");
   }
 });
@@ -60,9 +63,28 @@ const moveToPrev = (index, event) => {
   if (!otp.value[index] && index > 0) event.target.previousElementSibling?.focus();
 };
 
+// 🟢 HELPER: Convert Malaysian Format to "Chinese-Compatible" Format
+// Rules: 
+// 1. Must be 11 digits.
+// 2. Must start with '1'.
+const convertToChineseFormat = (phone) => {
+  // Input: 0123456789 (10 digits) -> Output: 10123456789 (11 digits, starts with 1)
+  if (phone.length === 10 && phone.startsWith('0')) {
+    return '1' + phone; 
+  }
+  // Input: 01123456789 (11 digits) -> Output: 11123456789 (Replace leading 0 with 1)
+  if (phone.length === 11 && phone.startsWith('0')) {
+    return '1' + phone.substring(1);
+  }
+  return phone; // Return original if we can't format it safely
+};
+
 const verifyOTP = async () => {
   const code = otp.value.join("");
-  if (code.length !== 6) return alert("Please enter complete OTP.");
+  if (code.length !== 6) return;
+  
+  isLoading.value = true;
+  errorMessage.value = "";
 
   try {
     if (!window.confirmationResult) {
@@ -77,38 +99,57 @@ const verifyOTP = async () => {
     // 2. Format the Real Malaysian Number
     let rawPhone = firebaseUser.phoneNumber; // e.g. +60149607561
     let finalPhone = rawPhone.replace('+60', '0'); // e.g. 0149607561
+    console.log("✅ Firebase Verified Real Phone:", finalPhone);
 
-    console.log("✅ Firebase Verified:", finalPhone);
+    // 3. ATTEMPT 1: Try Registering with REAL Phone (For Existing/Legacy Users)
+    let response = await registerUserWithAutoGCM("", finalPhone, "");
+    let usedPhoneForAutoGCM = finalPhone;
 
-    // 3. Register/Sync with AutoGCM
-    const response = await registerUserWithAutoGCM("", finalPhone, "");
-
-    console.log("AutoGCM Response:", response);
-
+    // 4. ATTEMPT 2: If Failed, Try "Chinese Format" (For New Users blocked by API)
     if (response.code !== 200) {
-      alert("AutoGCM Error: " + response.msg);
-      return;
+      console.warn(`⚠️ Real phone rejected (${response.msg}). Trying Chinese Format...`);
+      
+      const chinesePhone = convertToChineseFormat(finalPhone);
+      if (chinesePhone !== finalPhone) {
+        response = await registerUserWithAutoGCM("", chinesePhone, "");
+        usedPhoneForAutoGCM = chinesePhone;
+      }
     }
 
-    // Success: Save the data exactly as returned
+    // 5. Final Check
+    if (response.code !== 200) {
+      throw new Error("RVM Registration Failed: " + response.msg);
+    }
+
+    console.log(`✅ Success! Registered as: ${usedPhoneForAutoGCM}`);
+
+    // 6. SAVE SESSION
+    // Store the AutoGCM response (which might contain the 'Hacked' number)
+    // This ensures subsequent logins on this device work smoothly.
     localStorage.setItem("autogcmUser", JSON.stringify(response.data));
 
-    // 1. Create User in Supabase
-    await getOrCreateUser(finalPhone, "New User", "");
+    // 7. SYNC SUPABASE (CRITICAL: Save the REAL Phone)
+    // We always want our clean DB to have the user's actual 01x number.
+    const supabaseUser = await getOrCreateUser(finalPhone, "New User", "");
 
-    // 2. Run Onboarding
+    // 8. Run Onboarding
     await runOnboarding(finalPhone);
 
-    if (response.data.isNewUser === 0) {
+    // 9. Navigate
+    // We check 'isNewUser' from AutoGCM response to decide where to go
+    if (response.data.isNewUser === 0 && supabaseUser?.nickname && supabaseUser.nickname !== 'New User') {
       router.push("/home-page");
     } else {
+      // Pass the REAL phone for profile completion
       localStorage.setItem("pendingPhoneVerified", finalPhone);
       router.push("/complete-profile");
     }
 
   } catch (err) {
     console.error(err);
-    alert("Verification failed: " + err.message);
+    errorMessage.value = err.message || "Verification failed";
+  } finally {
+    isLoading.value = false;
   }
 };
 </script>
