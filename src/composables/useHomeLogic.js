@@ -1,29 +1,23 @@
 import { ref, onMounted } from "vue";
-import { getUserRecords, getNearbyRVMs, getMachineConfig, syncUser } from "../services/autogcm.js";
+import { getNearbyRVMs, getMachineConfig } from "../services/autogcm.js";
 import { supabase, getOrCreateUser } from "../services/supabase.js";
 
-// --- GLOBAL CACHE (Defined outside the function) ---
 const globalRvmList = ref([]); 
-const isFirstLoad = ref(true); // Tracks if we have fetched data at least once
+const isFirstLoad = ref(true);
 
 export function useHomeLogic() {
-  // 1. Init totalWeight as NULL to trigger skeleton if no cache exists
   const user = ref({ 
-    name: "", 
+    name: "User", 
     avatar: "/images/profile.png", 
-    totalWeight: null, // <--- Changed from "0.00"
-    balance: 0, 
+    totalWeight: null,
+    balance: "0.00", 
     phone: "",
-    pendingEarnings: 0
+    pendingEarnings: "0.00"
   });
   
   const sliderImages = ref(["/images/banner1.jpg", "/images/banner2.jpg"]);
-  
-  // Local loading state (For UI spinner/skeleton)
-  // If we already have data in globalRvmList, we don't need to show loading skeleton
   const isLoading = ref(isFirstLoad.value);
 
-  // CONFIGS
   const HIDDEN_MACHINES = ["071582000008"];
   const FALLBACK_MACHINES = [
     { deviceNo: "071582000002", address: "Taman Wawasan Recreational Park, Puchong", isonline: 0, status: 0, distance: 1200 },
@@ -33,84 +27,94 @@ export function useHomeLogic() {
   const mapTypeToLabel = (apiName) => {
     if (!apiName) return { label: "General", color: "green" };
     const lower = apiName.toLowerCase();
-    if (lower.includes("oil") || lower.includes("food") || lower.includes("minyak") || lower.includes("uco")) return { label: "Used Cooking Oil", color: "orange" };
-    if (lower.includes("paper") || lower.includes("kertas") || lower.includes("纸")) return { label: "Paper", color: "blue" };
-    if (lower.includes("plastic") || lower.includes("can") || lower.includes("aluminium") || lower.includes("botol")) return { label: "Plastic / Aluminium", color: "green" };
+    if (lower.includes("oil") || lower.includes("minyak")) return { label: "Used Cooking Oil", color: "orange" };
+    if (lower.includes("paper") || lower.includes("kertas")) return { label: "Paper", color: "blue" };
+    if (lower.includes("plastic") || lower.includes("botol") || lower.includes("can")) return { label: "Plastic / Aluminium", color: "green" };
     return { label: apiName, color: "gray" };
   };
 
-  const getCompStatus = (isMachineOnline, comp, calculatedPercent) => {
+  const getCompStatus = (isMachineOnline, isFull, percent) => {
     if (!isMachineOnline) return { text: "Offline", color: "red" };
-    if (comp.isFull === true || comp.isFull === "true") return { text: "Bin Full", color: "red" };
-    if (comp.status === 2 || comp.status === 3) return { text: "Maintenance", color: "red" };
-    if (calculatedPercent >= 95) return { text: "Almost Full", color: "orange" };
-    if (comp.status === 1) return { text: "In Use", color: "orange" };
+    if (isFull) return { text: "Bin Full", color: "red" }; // 🔴 Specific label for the bin
+    if (percent >= 95) return { text: "Almost Full", color: "orange" };
+    // Removed "In Use" check here to keep compartment status simple
     return { text: "Available", color: "green" };
   };
 
   const fetchRVMs = async () => {
     try {
-      // 1. Get Nearby
-      const nearby = await getNearbyRVMs(3.0454, 101.6172);
+      const nearby = await getNearbyRVMs(3.0454, 101.6172); 
       let allMachines = nearby?.data && Array.isArray(nearby.data) ? [...nearby.data] : [];
 
-      // 2. Merge Fallbacks & Filter
       FALLBACK_MACHINES.forEach(fallback => {
         if (!allMachines.find(m => m.deviceNo === fallback.deviceNo)) allMachines.push(fallback);
       });
       allMachines = allMachines.filter(m => !HIDDEN_MACHINES.includes(m.deviceNo));
 
-      // 3. Get Configs (Detailed Data)
       const detailedMachines = await Promise.all(allMachines.map(async (rvm) => {
         const configRes = await getMachineConfig(rvm.deviceNo);
         const configs = configRes?.data || [];
+        const hasValidConfig = (configRes && configRes.code === 200 && configs.length > 0);
         
-        let computedOnline = rvm.isonline; 
-        let computedStatus = rvm.status;
+        let computedOnline = false;
+        if (rvm.isonline == 1) computedOnline = true;
+        if (rvm.status == 0 || rvm.status == 1) computedOnline = true;
+        if (hasValidConfig) computedOnline = true;
+        if (FALLBACK_MACHINES.find(f => f.deviceNo === rvm.deviceNo)) computedOnline = true;
 
-        // Logic to fix offline/status flags based on config
-        if (configRes && configRes.code === 200) {
-            if (rvm.isonline === 0 && FALLBACK_MACHINES.find(f => f.deviceNo === rvm.deviceNo)) computedOnline = 1; 
-            const hasFault = configs.some(c => c.status === 2 || c.status === 3);
-            const hasActivity = configs.some(c => c.status === 1);
-            if (hasFault) computedStatus = 3; 
-            else if (hasActivity) computedStatus = 1; 
-            else computedStatus = 0; 
+        let computedStatus = rvm.status;
+        if (hasValidConfig) {
+             const hasFault = configs.some(c => c.status === 2 || c.status === 3);
+             if (hasFault) computedStatus = 3; 
+             // We ignore "In Use" (status 1) for the status calculation, treating it as working.
         }
-        return { ...rvm, configs, isonline: computedOnline, status: computedStatus };
+
+        return { ...rvm, configs, isRealOnline: computedOnline, computedStatus };
       }));
 
-      // 4. Map to UI
       const mappedList = detailedMachines.map(rvm => {
-        const isMachineOnline = (rvm.isonline || rvm.isOnline) == 1;
-        let machineStatusText = "Offline";
+        const isOnline = rvm.isRealOnline;
         
-        if (isMachineOnline) {
-            if (rvm.status == 1) machineStatusText = "In Use";
-            else if (rvm.status == 3 || rvm.status == 2) machineStatusText = "Maintenance";
-            else machineStatusText = "Online";
-        }
-
+        // 1. Process Compartments First
         const compartments = rvm.configs.map(conf => {
           const { label, color } = mapTypeToLabel(conf.rubbishTypeName);
-          let percent = 0;
+          let percent = conf.rate ? Math.round(conf.rate) : 0;
+          if (label === "Used Cooking Oil") percent = Math.round((Number(conf.weight || 0) / 400) * 100);
           
-          if (label === "Used Cooking Oil") {
-             const currentWeight = Number(conf.weight || 0);
-             percent = Math.round((currentWeight / 400) * 100);
-          } else {
-             percent = conf.rate ? Math.round(conf.rate) : 0;
-          }
-          if (percent > 100) percent = 100;
-          if (conf.isFull) percent = 100;
-
-          const statusObj = getCompStatus(isMachineOnline, conf, percent);
-
-          return { label, color, statusText: statusObj.text, statusColor: statusObj.color, percent };
+          // Determine if this specific bin is full
+          const isBinFull = (percent >= 100 || conf.isFull);
+          if (isBinFull) percent = 100;
+          
+          const statusObj = getCompStatus(isOnline, isBinFull, percent);
+          return { 
+              label, 
+              color, 
+              statusText: statusObj.text, 
+              statusColor: statusObj.color, 
+              percent,
+              isFull: isBinFull // Flag for parent check
+          };
         });
 
-        if (compartments.length === 0) {
-           compartments.push({ label: "Loading...", color: "gray", statusText: isMachineOnline ? "Connected" : "Offline", statusColor: "gray", percent: 0 });
+        if (compartments.length === 0) compartments.push({ label: "Loading...", color: "gray", percent: 0, isFull: false });
+
+        // 2. Determine Main Card Status
+        let machineStatusText = "Offline";
+
+        if (isOnline) {
+            // Priority 1: Maintenance
+            if (rvm.computedStatus == 3 || rvm.computedStatus == 2) {
+                machineStatusText = "Maintenance";
+            } 
+            // Priority 2: Are ALL bins full?
+            // We only show "Bin Full" on the card if EVERYTHING is full.
+            else if (compartments.length > 0 && compartments.every(c => c.isFull)) {
+                machineStatusText = "Bin Full";
+            } 
+            // Priority 3: Default
+            else {
+                machineStatusText = "Online"; // Shows "Online" even if In Use or Partially Full
+            }
         }
 
         return {
@@ -122,9 +126,8 @@ export function useHomeLogic() {
         };
       });
 
-      // Update Global Cache
       globalRvmList.value = mappedList;
-      isFirstLoad.value = false; // Mark as loaded so next time we don't show skeleton
+      isFirstLoad.value = false;
 
     } catch (e) {
       console.error("RVM Load Failed", e);
@@ -134,96 +137,37 @@ export function useHomeLogic() {
   };
 
   onMounted(async () => {
-    // 1. Load User from LocalStorage (Cache)
+    // ... (User Data Loading Logic remains same) ...
     const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-    
-    user.value = {
-      name: localUser.nikeName || "User",
-      avatar: localUser.avatarUrl || "/images/profile.png",
-      balance: localUser.integral || 0, 
-      phone: localUser.phone || "",
-      // Keep your existing cache logic
-      totalWeight: localUser.cachedWeight !== undefined ? localUser.cachedWeight : null 
-    };
+    user.value.phone = localUser.phone || "";
 
-    // 2. HYBRID SYNC: Calculate Real Balance & Weight
     if (user.value.phone) {
-      try {
-        // --- A. SYNC USER & BALANCE ---
-        // 1. Ensure user is in Supabase
-        const dbUser = await getOrCreateUser(user.value.phone, user.value.name, user.value.avatar);
-        
-        // 2. Get Lifetime Points from API
-        const apiRes = await syncUser(user.value.phone);
-        const lifetimePoints = Number(apiRes?.data?.integral || apiRes?.integral || 0);
+        try {
+            const dbUser = await getOrCreateUser(user.value.phone, localUser.nikeName, localUser.avatarUrl);
+            if (dbUser) {
+                user.value.name = dbUser.nickname || "User";
+                user.value.avatar = dbUser.avatar_url || "/images/profile.png";
+                user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
+                
+                const lifetime = Number(dbUser.lifetime_integral || 0);
+                const { data: withdrawals } = await supabase.from('withdrawals').select('amount').eq('user_id', dbUser.id).neq('status', 'REJECTED');
+                const spent = withdrawals?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
+                user.value.balance = (lifetime - spent).toFixed(2);
 
-        // 3. Get Spent Points from Supabase
-        let spentPoints = 0;
-        if (dbUser) {
-           const { data: withdrawals } = await supabase
-             .from('withdrawals')
-             .select('amount, status')
-             .eq('user_id', dbUser.id)
-             .neq('status', 'REJECTED'); // Count Pending, Approved, Paid
-           
-           spentPoints = withdrawals?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
+                const { data: submissions } = await supabase.from('submission_reviews').select('machine_given_points').eq('user_id', dbUser.id).eq('status', 'PENDING');
+                const incoming = submissions?.reduce((sum, s) => sum + Number(s.machine_given_points), 0) || 0;
+                user.value.pendingEarnings = incoming.toFixed(2);
+            }
+        } catch (err) {
+            console.error("User Load Error:", err);
+            if (user.value.totalWeight === null) user.value.totalWeight = "0.00";
         }
-
-        // 4. Calculate Real Balance
-        const realBalance = (lifetimePoints - spentPoints).toFixed(2);
-        user.value.balance = realBalance;
-        localUser.integral = realBalance; // Update cache object
-
-        if (dbUser && lifetimePoints > 0) {
-           await supabase
-             .from('users')
-             .update({ 
-                lifetime_integral: lifetimePoints, 
-                last_synced_at: new Date() 
-             })
-             .eq('id', dbUser.id);
-        }
-
-        // Query the submission_reviews table for 'PENDING' items
-        if (dbUser) {
-           const { data: submissions } = await supabase
-             .from('submission_reviews')
-             .select('machine_given_points')
-             .eq('user_id', dbUser.id)
-             .eq('status', 'PENDING'); // Only look for unapproved items
-           
-           // Sum them up
-           const incoming = submissions?.reduce((sum, s) => sum + Number(s.s.machine_given_points), 0) || 0;
-           user.value.pendingEarnings = incoming.toFixed(2);
-        }
-
-        // --- B. SYNC WEIGHT HISTORY (Your Old Logic) ---
-        const weightRes = await getUserRecords(user.value.phone, 1, 100);
-        if (weightRes?.data?.list) {
-            const total = weightRes.data.list.reduce((sum, item) => sum + (Number(item.weight) || 0), 0);
-            const finalWeight = total.toFixed(2);
-            
-            user.value.totalWeight = finalWeight;
-            localUser.cachedWeight = finalWeight; // Update cache object
-        }
-
-        // Save everything to LocalStorage
-        localStorage.setItem("autogcmUser", JSON.stringify(localUser));
-
-      } catch (err) {
-        console.error("User Data Sync Failed:", err);
-        // Fallback: If weight is still null (and API failed), show 0.00
-        if (user.value.totalWeight === null) user.value.totalWeight = "0.00";
-      }
     } else {
-       // Guest User
-       if (user.value.totalWeight === null) user.value.totalWeight = "0.00";
+        user.value.totalWeight = "0.00";
     }
 
-    // 3. FETCH MACHINES (Your Old Logic - Preserved!)
     await fetchRVMs();
   });
 
-  // Return the GLOBAL variable, not a local one
   return { user, rvmList: globalRvmList, sliderImages, isLoading };
 }

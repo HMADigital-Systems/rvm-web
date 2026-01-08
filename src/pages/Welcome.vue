@@ -35,6 +35,7 @@
 <script setup>
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import LanguageSelector from "../components/LanguageSelector.vue";
 
 const router = useRouter();
 const { t } = useI18n();

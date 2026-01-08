@@ -1,10 +1,15 @@
 <template>
-  <div class="bg-white rounded-2xl shadow-md overflow-hidden w-80 flex-shrink-0 mx-2 hover:shadow-lg transition border border-gray-100">
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden w-80 flex-shrink-0 mx-2 hover:shadow-lg transition border border-gray-100">
     
     <div class="relative">
       <img :src="image" alt="RVM Machine" class="w-full h-36 object-cover" />
+      
       <span class="absolute top-2 right-2 text-white text-xs px-3 py-1 rounded-md font-medium shadow-sm"
-        :class="status === 'Online' ? 'bg-green-500' : 'bg-gray-500'">
+        :class="{
+            'bg-green-500': status === 'Online',
+            'bg-red-500': status === 'Bin Full' || status === 'Maintenance',
+            'bg-gray-500': status === 'Offline'
+        }">
         {{ status }}
       </span>
     </div>
@@ -13,7 +18,7 @@
       <div class="flex justify-between items-start text-gray-700 mb-3">
         <p class="font-semibold text-sm leading-tight flex-1 pr-2">{{ address }}</p>
         <div class="flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0">
-           📍 {{ distance }} km
+            📍 {{ distance }} km
         </div>
       </div>
 
@@ -34,7 +39,8 @@
             <span class="text-xs font-bold uppercase tracking-wide"
               :class="{
                 'text-green-600': item.statusColor === 'green',
-                'text-red-500': item.statusColor === 'red'
+                'text-red-500': item.statusColor === 'red',
+                'text-orange-500': item.statusColor === 'orange'
               }">
               {{ item.statusText }} ({{ item.percent }}%)
             </span>

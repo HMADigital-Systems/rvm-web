@@ -49,7 +49,6 @@ const errorMessage = ref("");
 
 onMounted(() => {
   if (!window.confirmationResult) {
-    // alert("Session expired. Please verify phone again.");
     router.push("/verify-phone");
   }
 });
@@ -63,20 +62,14 @@ const moveToPrev = (index, event) => {
   if (!otp.value[index] && index > 0) event.target.previousElementSibling?.focus();
 };
 
-// 🟢 HELPER: Convert Malaysian Format to "Chinese-Compatible" Format
-// Rules: 
-// 1. Must be 11 digits.
-// 2. Must start with '1'.
 const convertToChineseFormat = (phone) => {
-  // Input: 0123456789 (10 digits) -> Output: 10123456789 (11 digits, starts with 1)
   if (phone.length === 10 && phone.startsWith('0')) {
     return '1' + phone; 
   }
-  // Input: 01123456789 (11 digits) -> Output: 11123456789 (Replace leading 0 with 1)
   if (phone.length === 11 && phone.startsWith('0')) {
     return '1' + phone.substring(1);
   }
-  return phone; // Return original if we can't format it safely
+  return phone; 
 };
 
 const verifyOTP = async () => {
@@ -88,8 +81,7 @@ const verifyOTP = async () => {
 
   try {
     if (!window.confirmationResult) {
-      router.push("/verify-phone");
-      return;
+      throw new Error("Session expired. Please try again.");
     }
 
     // 1. Verify with Firebase
@@ -97,50 +89,65 @@ const verifyOTP = async () => {
     const firebaseUser = result.user;
 
     // 2. Format the Real Malaysian Number
-    let rawPhone = firebaseUser.phoneNumber; // e.g. +60149607561
-    let finalPhone = rawPhone.replace('+60', '0'); // e.g. 0149607561
+    let rawPhone = firebaseUser.phoneNumber; 
+    let finalPhone = rawPhone.replace('+60', '0'); 
     console.log("✅ Firebase Verified Real Phone:", finalPhone);
 
-    // 3. ATTEMPT 1: Try Registering with REAL Phone (For Existing/Legacy Users)
-    let response = await registerUserWithAutoGCM("", finalPhone, "");
+    let response = null;
     let usedPhoneForAutoGCM = finalPhone;
 
-    // 4. ATTEMPT 2: If Failed, Try "Chinese Format" (For New Users blocked by API)
-    if (response.code !== 200) {
-      console.warn(`⚠️ Real phone rejected (${response.msg}). Trying Chinese Format...`);
-      
+    // ---------------------------------------------------------
+    // 🛡️ THE SAFETY NET (Attempt 1)
+    // ---------------------------------------------------------
+    // We wrap this in a TRY/CATCH so if the API returns 500 (Reject),
+    // we DON'T crash. We just swallow the error and move to Attempt 2.
+    try {
+        console.log("👉 Attempt 1: Trying Real Phone:", finalPhone);
+        response = await registerUserWithAutoGCM("", finalPhone, "");
+    } catch (err) {
+        console.warn("⚠️ Attempt 1 Failed (API Rejected Number):", err.message);
+        response = null; // Mark as failed so we force Attempt 2
+    }
+
+    // ---------------------------------------------------------
+    // 🛡️ THE FALLBACK (Attempt 2)
+    // ---------------------------------------------------------
+    // If response is null (crashed) OR the code is not 200 (logic error)
+    if (!response || response.code !== 200) {
       const chinesePhone = convertToChineseFormat(finalPhone);
+      
       if (chinesePhone !== finalPhone) {
-        response = await registerUserWithAutoGCM("", chinesePhone, "");
-        usedPhoneForAutoGCM = chinesePhone;
+        console.log(`🔄 Attempt 2: Retrying with Chinese Format: ${chinesePhone}`);
+        try {
+            response = await registerUserWithAutoGCM("", chinesePhone, "");
+            usedPhoneForAutoGCM = chinesePhone;
+        } catch (err2) {
+            console.error("❌ Attempt 2 Failed:", err2.message);
+            throw new Error("Registration System Unavailable. Please contact support.");
+        }
       }
     }
 
     // 5. Final Check
-    if (response.code !== 200) {
-      throw new Error("RVM Registration Failed: " + response.msg);
+    if (!response || response.code !== 200) {
+      throw new Error(response ? response.msg : "Unknown Registration Error");
     }
 
     console.log(`✅ Success! Registered as: ${usedPhoneForAutoGCM}`);
 
     // 6. SAVE SESSION
-    // Store the AutoGCM response (which might contain the 'Hacked' number)
-    // This ensures subsequent logins on this device work smoothly.
     localStorage.setItem("autogcmUser", JSON.stringify(response.data));
 
-    // 7. SYNC SUPABASE (CRITICAL: Save the REAL Phone)
-    // We always want our clean DB to have the user's actual 01x number.
+    // 7. SYNC SUPABASE (Save REAL Phone)
     const supabaseUser = await getOrCreateUser(finalPhone, "New User", "");
 
     // 8. Run Onboarding
     await runOnboarding(finalPhone);
 
     // 9. Navigate
-    // We check 'isNewUser' from AutoGCM response to decide where to go
     if (response.data.isNewUser === 0 && supabaseUser?.nickname && supabaseUser.nickname !== 'New User') {
       router.push("/home-page");
     } else {
-      // Pass the REAL phone for profile completion
       localStorage.setItem("pendingPhoneVerified", finalPhone);
       router.push("/complete-profile");
     }

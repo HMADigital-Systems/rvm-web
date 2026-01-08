@@ -1,16 +1,17 @@
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { getUserRecords, updateUserProfile } from "../services/autogcm.js";
+import { updateUserProfile } from "../services/autogcm.js"; 
+import { supabase, getOrCreateUser } from "../services/supabase.js";
 
 export function useProfileLogic() {
   const router = useRouter();
 
   // --- State ---
   const user = ref({
-    name: "",
+    name: "User",
     phone: "",
-    totalWeight: null, // Change default from "0.00" to null to trigger Skeleton
-    points: 0,
+    totalWeight: null,
+    points: "0.00",
     avatar: "/images/profile.png",
   });
 
@@ -18,11 +19,15 @@ export function useProfileLogic() {
   const showEditModal = ref(false);
   const isSaving = ref(false);
 
-  // Temporary state for the edit form
-  const editForm = reactive({
-    name: "",
-    avatar: ""
+  // 🟢 NEW: Feedback Modal State (Replaces alert)
+  const feedbackModal = reactive({
+    isOpen: false,
+    title: "",
+    message: "",
+    isError: false
   });
+
+  const editForm = reactive({ name: "", avatar: "" });
 
   const presetAvatars = [
     "/images/profile.png",
@@ -34,15 +39,21 @@ export function useProfileLogic() {
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Milo",
   ];
 
-  // --- Actions ---
-
-  const handleImageError = (e) => {
-    e.target.src = "/images/profile.png";
+  // --- Helpers ---
+  const showFeedback = (title, message, isError = false) => {
+    feedbackModal.title = title;
+    feedbackModal.message = message;
+    feedbackModal.isError = isError;
+    feedbackModal.isOpen = true;
   };
 
-  const confirmLogout = () => {
-    showLogoutModal.value = true;
+  const closeFeedback = () => {
+    feedbackModal.isOpen = false;
   };
+
+  const handleImageError = (e) => e.target.src = "/images/profile.png";
+
+  const confirmLogout = () => showLogoutModal.value = true;
 
   const performLogout = () => {
     localStorage.clear();
@@ -56,74 +67,71 @@ export function useProfileLogic() {
   };
 
   const saveProfile = async () => {
-    if (!editForm.name.trim()) return alert("Nickname cannot be empty");
+    if (!editForm.name.trim()) return showFeedback("Error", "Nickname cannot be empty", true);
 
     isSaving.value = true;
     try {
-      const res = await updateUserProfile(user.value.phone, editForm.name, editForm.avatar);
-      
-      if (res.code === 200) {
-        user.value.name = editForm.name;
-        user.value.avatar = editForm.avatar;
+      const phone = user.value.phone;
 
-        const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-        localUser.nikeName = editForm.name;
-        localUser.name = editForm.name;
-        localUser.avatarUrl = editForm.avatar;
-        localUser.imgUrl = editForm.avatar;
-        
-        localStorage.setItem("autogcmUser", JSON.stringify(localUser));
-        
-        showEditModal.value = false;
-        alert("Profile Updated Successfully!");
-      } else {
-        alert("Update failed: " + (res.msg || "Unknown error"));
-      }
+      // 1. Update Supabase
+      const { error } = await supabase
+        .from('users')
+        .update({ nickname: editForm.name, avatar_url: editForm.avatar })
+        .eq('phone', phone);
+
+      if (error) throw error;
+
+      // 2. Update AutoGCM (Silent Best Effort)
+      try { await updateUserProfile(phone, editForm.name, editForm.avatar); } catch (e) { console.warn(e); }
+
+      // 3. Update Local State & Cache
+      user.value.name = editForm.name;
+      user.value.avatar = editForm.avatar;
+
+      const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
+      localUser.nikeName = editForm.name;
+      localUser.avatarUrl = editForm.avatar;
+      localStorage.setItem("autogcmUser", JSON.stringify(localUser));
+      
+      showEditModal.value = false;
+      
+      // ✅ SUCCESS: Show Native Modal instead of alert()
+      showFeedback("Success!", "Profile updated successfully.");
+
     } catch (e) {
       console.error(e);
-      alert("Network error. Please try again.");
+      showFeedback("Error", "Failed to update profile. Please try again.", true);
     } finally {
       isSaving.value = false;
     }
   };
 
-  // --- Lifecycle ---
+  // --- Lifecycle (Same as before) ---
   onMounted(async () => {
     const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
+    const phone = localUser.phone;
 
-    // 1. Load from Cache (Immediate UI update)
-    user.value.name = localUser.name || localUser.nikeName || "User";
-    user.value.phone = localUser.phone || "";
-    user.value.avatar = localUser.avatarUrl || localUser.imgUrl || "/images/profile.png";
-    user.value.points = localUser.integral || 0;
-    
-    // Check if we have cached weight
-    if (localUser.cachedWeight !== undefined) {
-        user.value.totalWeight = localUser.cachedWeight;
+    user.value.phone = phone || "";
+    user.value.name = localUser.nikeName || "User";
+    user.value.avatar = localUser.avatarUrl || "/images/profile.png";
+    if (localUser.cachedWeight) user.value.totalWeight = localUser.cachedWeight;
+
+    if (phone) {
+        try {
+            const dbUser = await getOrCreateUser(phone, user.value.name, user.value.avatar);
+            if (dbUser) {
+                user.value.name = dbUser.nickname || user.value.name;
+                user.value.avatar = dbUser.avatar_url || user.value.avatar;
+                user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
+
+                const lifetime = Number(dbUser.lifetime_integral || 0);
+                const { data: withdrawals } = await supabase.from('withdrawals').select('amount').eq('user_id', dbUser.id).neq('status', 'REJECTED');
+                const spent = withdrawals?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
+                user.value.points = (lifetime - spent).toFixed(2);
+            }
+        } catch (e) { console.error(e); }
     }
-
-    // 2. Fetch Fresh Data (Background)
-    if (localUser.phone) {
-      try {
-        const recordRes = await getUserRecords(localUser.phone);
-        if (recordRes?.data?.list) {
-          const total = recordRes.data.list.reduce((sum, item) => sum + (Number(item.weight) || 0), 0);
-          const formattedWeight = total.toFixed(2);
-          
-          // Update State
-          user.value.totalWeight = formattedWeight;
-
-          // Update Cache
-          localUser.cachedWeight = formattedWeight;
-          localStorage.setItem("autogcmUser", JSON.stringify(localUser));
-        }
-      } catch (e) {
-        console.error("Failed to load recycling records", e);
-      }
-    } else {
-        // If no phone (guest?), set weight to 0 if null
-        if (user.value.totalWeight === null) user.value.totalWeight = "0.00";
-    }
+    if (user.value.totalWeight === null) user.value.totalWeight = "0.00";
   });
 
   return {
@@ -133,6 +141,9 @@ export function useProfileLogic() {
     isSaving,
     editForm,
     presetAvatars,
+    feedbackModal, 
+    showFeedback,
+    closeFeedback, 
     handleImageError,
     confirmLogout,
     performLogout,

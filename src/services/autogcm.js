@@ -20,13 +20,18 @@ async function callApi(endpoint, method = 'GET', data = {}) {
   }
 } 
 
-// ✅ 1. Register / Sync User
+// 1. Register / Sync User (Updated with Safety Fallback)
 export async function syncUser(phone, nickname = "", avatarUrl = "") {
   console.log(`📡 Syncing User: "${phone}"`);
+
+  // SAFETY CHECK: Ensure nickname is never empty string
+  // If nickname is "" or null, use "RVM User" instead.
+  const safeNickname = (nickname && nickname.trim() !== "") ? nickname : "RVM User";
+
   return await callApi('/api/open/v1/user/account/sync', 'POST', {
     phone: phone,
-    nikeName: nickname, // API typo 'nikeName' is required
-    avatarUrl
+    nikeName: safeNickname, // ✅ Now guaranteed to have a value
+    avatarUrl: avatarUrl || ""
   });
 }
 
