@@ -2,21 +2,35 @@ import { ref, onMounted } from "vue";
 import { getNearbyRVMs, getMachineConfig } from "../services/autogcm.js";
 import { supabase, getOrCreateUser } from "../services/supabase.js";
 
+// Keep global state to share across components if needed
 const globalRvmList = ref([]); 
 const isFirstLoad = ref(true);
 
 export function useHomeLogic() {
+  // 1. Initialize State with Cache immediately
+  const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
+  const cachedRVMs = JSON.parse(localStorage.getItem("cachedRVMList") || "[]");
+
+  // Populate global list from cache if empty
+  if (globalRvmList.value.length === 0 && cachedRVMs.length > 0) {
+    globalRvmList.value = cachedRVMs;
+    isFirstLoad.value = false; // We have data, so we aren't "loading" visually
+  }
+
   const user = ref({ 
     name: "User", 
     avatar: "/images/profile.png", 
-    totalWeight: null,
-    balance: "0.00", 
+    // ✅ LOAD CACHE: Use cached values if available, otherwise default
+    totalWeight: localUser.cachedWeight || null,
+    balance: localUser.cachedBalance || "0.00", 
     phone: "",
-    pendingEarnings: "0.00"
+    pendingEarnings: localUser.cachedPending || "0.00"
   });
   
   const sliderImages = ref(["/images/banner1.jpg", "/images/banner2.jpg"]);
-  const isLoading = ref(isFirstLoad.value);
+  
+  // Only show skeleton if we have NO data in memory AND NO data in cache
+  const isLoading = ref(globalRvmList.value.length === 0);
 
   const HIDDEN_MACHINES = ["071582000008"];
   const FALLBACK_MACHINES = [
@@ -35,13 +49,16 @@ export function useHomeLogic() {
 
   const getCompStatus = (isMachineOnline, isFull, percent) => {
     if (!isMachineOnline) return { text: "Offline", color: "red" };
-    if (isFull) return { text: "Bin Full", color: "red" }; // 🔴 Specific label for the bin
+    if (isFull) return { text: "Bin Full", color: "red" }; 
     if (percent >= 95) return { text: "Almost Full", color: "orange" };
-    // Removed "In Use" check here to keep compartment status simple
     return { text: "Available", color: "green" };
   };
 
   const fetchRVMs = async () => {
+    // Note: We do NOT set isLoading = true here if we already have data.
+    // This creates a "silent update" experience.
+    if (globalRvmList.value.length === 0) isLoading.value = true;
+
     try {
       const nearby = await getNearbyRVMs(3.0454, 101.6172); 
       let allMachines = nearby?.data && Array.isArray(nearby.data) ? [...nearby.data] : [];
@@ -66,7 +83,6 @@ export function useHomeLogic() {
         if (hasValidConfig) {
              const hasFault = configs.some(c => c.status === 2 || c.status === 3);
              if (hasFault) computedStatus = 3; 
-             // We ignore "In Use" (status 1) for the status calculation, treating it as working.
         }
 
         return { ...rvm, configs, isRealOnline: computedOnline, computedStatus };
@@ -75,46 +91,25 @@ export function useHomeLogic() {
       const mappedList = detailedMachines.map(rvm => {
         const isOnline = rvm.isRealOnline;
         
-        // 1. Process Compartments First
         const compartments = rvm.configs.map(conf => {
           const { label, color } = mapTypeToLabel(conf.rubbishTypeName);
           let percent = conf.rate ? Math.round(conf.rate) : 0;
           if (label === "Used Cooking Oil") percent = Math.round((Number(conf.weight || 0) / 400) * 100);
           
-          // Determine if this specific bin is full
           const isBinFull = (percent >= 100 || conf.isFull);
           if (isBinFull) percent = 100;
           
           const statusObj = getCompStatus(isOnline, isBinFull, percent);
-          return { 
-              label, 
-              color, 
-              statusText: statusObj.text, 
-              statusColor: statusObj.color, 
-              percent,
-              isFull: isBinFull // Flag for parent check
-          };
+          return { label, color, statusText: statusObj.text, statusColor: statusObj.color, percent, isFull: isBinFull };
         });
 
         if (compartments.length === 0) compartments.push({ label: "Loading...", color: "gray", percent: 0, isFull: false });
 
-        // 2. Determine Main Card Status
         let machineStatusText = "Offline";
-
         if (isOnline) {
-            // Priority 1: Maintenance
-            if (rvm.computedStatus == 3 || rvm.computedStatus == 2) {
-                machineStatusText = "Maintenance";
-            } 
-            // Priority 2: Are ALL bins full?
-            // We only show "Bin Full" on the card if EVERYTHING is full.
-            else if (compartments.length > 0 && compartments.every(c => c.isFull)) {
-                machineStatusText = "Bin Full";
-            } 
-            // Priority 3: Default
-            else {
-                machineStatusText = "Online"; // Shows "Online" even if In Use or Partially Full
-            }
+            if (rvm.computedStatus == 3 || rvm.computedStatus == 2) machineStatusText = "Maintenance";
+            else if (compartments.length > 0 && compartments.every(c => c.isFull)) machineStatusText = "Bin Full";
+            else machineStatusText = "Online";
         }
 
         return {
@@ -128,6 +123,9 @@ export function useHomeLogic() {
 
       globalRvmList.value = mappedList;
       isFirstLoad.value = false;
+      
+      // ✅ SAVE CACHE: Store the fresh list so next time it loads instantly
+      localStorage.setItem("cachedRVMList", JSON.stringify(mappedList));
 
     } catch (e) {
       console.error("RVM Load Failed", e);
@@ -136,17 +134,33 @@ export function useHomeLogic() {
     }
   };
 
-  onMounted(async () => {
-    // ... (User Data Loading Logic remains same) ...
-    const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-    user.value.phone = localUser.phone || "";
+  const updateCache = () => {
+      const cache = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
+      cache.cachedWeight = user.value.totalWeight;
+      cache.cachedBalance = user.value.balance;
+      cache.cachedPending = user.value.pendingEarnings;
+      localStorage.setItem("autogcmUser", JSON.stringify(cache));
+  };
 
+  onMounted(async () => {
+    // 1. READ LOCAL STORAGE (Immediate Display)
+    const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
+    const displayName = localUser.nikeName || localUser.nickname || localUser.name || "User";
+    
+    user.value.name = displayName;
+    user.value.avatar = localUser.avatarUrl || localUser.avatar || "/images/profile.png";
+    user.value.phone = localUser.phone || localUser.phonenumber || localUser.phoneNumber || "";
+
+    // 2. FETCH DB DATA (Background Update)
     if (user.value.phone) {
         try {
-            const dbUser = await getOrCreateUser(user.value.phone, localUser.nikeName, localUser.avatarUrl);
+            const dbUser = await getOrCreateUser(user.value.phone, displayName, user.value.avatar);
+            
             if (dbUser) {
-                user.value.name = dbUser.nickname || "User";
-                user.value.avatar = dbUser.avatar_url || "/images/profile.png";
+                user.value.name = dbUser.nickname || displayName;
+                user.value.avatar = dbUser.avatar_url || user.value.avatar;
+                
+                // Stats
                 user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
                 
                 const lifetime = Number(dbUser.lifetime_integral || 0);
@@ -157,12 +171,16 @@ export function useHomeLogic() {
                 const { data: submissions } = await supabase.from('submission_reviews').select('machine_given_points').eq('user_id', dbUser.id).eq('status', 'PENDING');
                 const incoming = submissions?.reduce((sum, s) => sum + Number(s.machine_given_points), 0) || 0;
                 user.value.pendingEarnings = incoming.toFixed(2);
+
+                // ✅ UPDATE CACHE: Save new values for next time
+                updateCache();
             }
         } catch (err) {
             console.error("User Load Error:", err);
             if (user.value.totalWeight === null) user.value.totalWeight = "0.00";
         }
     } else {
+        console.warn("⚠️ No phone number found in localStorage 'autogcmUser'");
         user.value.totalWeight = "0.00";
     }
 

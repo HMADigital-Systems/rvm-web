@@ -7,19 +7,25 @@
     </div>
     <h2 class="text-2xl font-bold text-green-700 mb-2">Registration Complete</h2>
     <p class="text-gray-600 mb-6">Welcome, <span class="font-semibold text-green-700">{{ displayName }}</span>!</p>
-    <button @click="goToHome" class="w-full max-w-xs bg-green-600 text-white py-2 rounded-full font-semibold hover:bg-green-700 transition">
+    <button @click="goToHome" class="w-full max-w-xs bg-green-600 text-white py-2 rounded-full font-semibold hover:bg-green-700 transition shadow-lg">
       Start Recycling
     </button>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
-const userData = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-const displayName = ref(userData?.nikeName || "User");
+const displayName = ref("User");
+
+onMounted(() => {
+  // Read the freshly saved user object
+  const userData = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
+  // 'nikeName' is the API field for nickname. Fallback to 'name' or 'User'.
+  displayName.value = userData.nikeName || userData.name || "RVM User";
+});
 
 const goToHome = () => router.push("/home-page");
 </script>

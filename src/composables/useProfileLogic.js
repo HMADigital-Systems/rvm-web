@@ -6,20 +6,23 @@ import { supabase, getOrCreateUser } from "../services/supabase.js";
 export function useProfileLogic() {
   const router = useRouter();
 
+  // Load cache helper
+  const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
+
   // --- State ---
   const user = ref({
-    name: "User",
-    phone: "",
-    totalWeight: null,
-    points: "0.00",
-    avatar: "/images/profile.png",
+    name: localUser.nikeName || "User",
+    phone: localUser.phone || "",
+    // ✅ LOAD CACHE
+    totalWeight: localUser.cachedWeight || null,
+    points: localUser.cachedBalance || "0.00",
+    avatar: localUser.avatarUrl || "/images/profile.png",
   });
 
   const showLogoutModal = ref(false);
   const showEditModal = ref(false);
   const isSaving = ref(false);
 
-  // 🟢 NEW: Feedback Modal State (Replaces alert)
   const feedbackModal = reactive({
     isOpen: false,
     title: "",
@@ -94,8 +97,6 @@ export function useProfileLogic() {
       localStorage.setItem("autogcmUser", JSON.stringify(localUser));
       
       showEditModal.value = false;
-      
-      // ✅ SUCCESS: Show Native Modal instead of alert()
       showFeedback("Success!", "Profile updated successfully.");
 
     } catch (e) {
@@ -106,16 +107,12 @@ export function useProfileLogic() {
     }
   };
 
-  // --- Lifecycle (Same as before) ---
+  // --- Lifecycle ---
   onMounted(async () => {
     const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
     const phone = localUser.phone;
 
-    user.value.phone = phone || "";
-    user.value.name = localUser.nikeName || "User";
-    user.value.avatar = localUser.avatarUrl || "/images/profile.png";
-    if (localUser.cachedWeight) user.value.totalWeight = localUser.cachedWeight;
-
+    // We already set initial state from cache above, now we refresh
     if (phone) {
         try {
             const dbUser = await getOrCreateUser(phone, user.value.name, user.value.avatar);
@@ -128,6 +125,11 @@ export function useProfileLogic() {
                 const { data: withdrawals } = await supabase.from('withdrawals').select('amount').eq('user_id', dbUser.id).neq('status', 'REJECTED');
                 const spent = withdrawals?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
                 user.value.points = (lifetime - spent).toFixed(2);
+
+                // ✅ UPDATE CACHE
+                localUser.cachedWeight = user.value.totalWeight;
+                localUser.cachedBalance = user.value.points;
+                localStorage.setItem("autogcmUser", JSON.stringify(localUser));
             }
         } catch (e) { console.error(e); }
     }

@@ -2,14 +2,13 @@
   <header
     class="fixed top-0 left-0 w-full bg-white shadow-md flex items-center gap-4 px-6 py-3 z-50"
   >
-    <!-- 🧑 Profile Picture -->
     <img
-      :src="user.avatar"
+      :src="user.avatar || '/images/profile.png'"
       alt="Profile"
       class="w-12 h-12 rounded-full border border-green-300 object-cover"
+      @error="$event.target.src = '/images/profile.png'"
     />
 
-    <!-- 👋 Greeting Text -->
     <div class="flex flex-col">
       <div class="flex items-center gap-1">
         <h2 class="text-lg font-bold text-green-700">Hello, {{ user.name }}</h2>
@@ -20,14 +19,12 @@
 </template>
 
 <script setup>
-
 defineProps({
   user: {
     type: Object,
-    default: () => ({
-      name: "Ariff",
-      avatar: "/images/profile.png", 
-    }),
+    required: true,
+    // Defaults are handled by parent (useHomeLogic), but we keep a safe fallback structure
+    default: () => ({ name: "", avatar: "" }),
   },
 });
 </script>

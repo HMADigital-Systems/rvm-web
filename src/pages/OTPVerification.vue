@@ -21,9 +21,14 @@
       </div>
 
       <button @click="verifyOTP" :disabled="isLoading"
-        class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50">
-        <span v-if="isLoading">Verifying...</span>
-        <span v-else>Verify OTP</span>
+        class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 flex justify-center items-center gap-2">
+        
+        <svg v-if="isLoading" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+
+        <span>{{ isLoading ? statusMessage : "Verify OTP" }}</span>
       </button>
 
       <button @click="router.push('/verify-phone')" class="mt-4 text-sm text-green-600 hover:underline">
@@ -46,6 +51,7 @@ const router = useRouter();
 const otp = ref(["", "", "", "", "", ""]);
 const isLoading = ref(false);
 const errorMessage = ref("");
+const statusMessage = ref(""); // Granular status updates
 
 onMounted(() => {
   if (!window.confirmationResult) {
@@ -63,12 +69,8 @@ const moveToPrev = (index, event) => {
 };
 
 const convertToChineseFormat = (phone) => {
-  if (phone.length === 10 && phone.startsWith('0')) {
-    return '1' + phone; 
-  }
-  if (phone.length === 11 && phone.startsWith('0')) {
-    return '1' + phone.substring(1);
-  }
+  if (phone.length === 10 && phone.startsWith('0')) return '1' + phone;
+  if (phone.length === 11 && phone.startsWith('0')) return '1' + phone.substring(1);
   return phone; 
 };
 
@@ -78,6 +80,7 @@ const verifyOTP = async () => {
   
   isLoading.value = true;
   errorMessage.value = "";
+  statusMessage.value = "Verifying Code..."; // 1. Initial State
 
   try {
     if (!window.confirmationResult) {
@@ -90,34 +93,32 @@ const verifyOTP = async () => {
 
     // 2. Format the Real Malaysian Number
     let rawPhone = firebaseUser.phoneNumber; 
-    let finalPhone = rawPhone.replace('+60', '0'); 
-    console.log("✅ Firebase Verified Real Phone:", finalPhone);
+    let finalPhone = rawPhone.replace('+60', '0');
 
+    // ✅ FIX: DECLARE VARIABLES HERE BEFORE TRY/CATCH BLOCKS
     let response = null;
     let usedPhoneForAutoGCM = finalPhone;
 
     // ---------------------------------------------------------
     // 🛡️ THE SAFETY NET (Attempt 1)
     // ---------------------------------------------------------
-    // We wrap this in a TRY/CATCH so if the API returns 500 (Reject),
-    // we DON'T crash. We just swallow the error and move to Attempt 2.
     try {
         console.log("👉 Attempt 1: Trying Real Phone:", finalPhone);
         response = await registerUserWithAutoGCM("", finalPhone, "");
     } catch (err) {
-        console.warn("⚠️ Attempt 1 Failed (API Rejected Number):", err.message);
-        response = null; // Mark as failed so we force Attempt 2
+        console.warn("⚠️ Attempt 1 Failed:", err.message);
+        response = null; 
     }
 
     // ---------------------------------------------------------
     // 🛡️ THE FALLBACK (Attempt 2)
     // ---------------------------------------------------------
-    // If response is null (crashed) OR the code is not 200 (logic error)
     if (!response || response.code !== 200) {
       const chinesePhone = convertToChineseFormat(finalPhone);
       
       if (chinesePhone !== finalPhone) {
         console.log(`🔄 Attempt 2: Retrying with Chinese Format: ${chinesePhone}`);
+        statusMessage.value = "Retrying alternative format..."; // Update UI
         try {
             response = await registerUserWithAutoGCM("", chinesePhone, "");
             usedPhoneForAutoGCM = chinesePhone;
@@ -138,25 +139,36 @@ const verifyOTP = async () => {
     // 6. SAVE SESSION
     localStorage.setItem("autogcmUser", JSON.stringify(response.data));
 
+    statusMessage.value = "Syncing History..."; // 2. Update Message before heavy task
+
     // 7. SYNC SUPABASE (Save REAL Phone)
     const supabaseUser = await getOrCreateUser(finalPhone, "New User", "");
 
-    // 8. Run Onboarding
-    await runOnboarding(finalPhone);
+    // 8. Run Onboarding (The Heavy Task)
+    await runOnboarding(finalPhone); 
+
+    statusMessage.value = "Finalizing..."; // 3. Almost done
 
     // 9. Navigate
     if (response.data.isNewUser === 0 && supabaseUser?.nickname && supabaseUser.nickname !== 'New User') {
       router.push("/home-page");
     } else {
       localStorage.setItem("pendingPhoneVerified", finalPhone);
-      router.push("/complete-profile");
+      
+      const legacyName = response.data?.nikeName || response.data?.name || '';
+      
+      router.push({ 
+        path: "/complete-profile", 
+        query: { legacyName: legacyName } 
+      });
     }
 
-  } catch (err) {
-    console.error(err);
-    errorMessage.value = err.message || "Verification failed";
+  } catch (error) {
+      console.error(error);
+      errorMessage.value = error.message; // Show error on screen
   } finally {
-    isLoading.value = false;
+      isLoading.value = false;
+      statusMessage.value = "";
   }
 };
 </script>

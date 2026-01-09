@@ -16,13 +16,20 @@
             Google
           </span>
         </div>
-        <p class="text-xs text-gray-400 mt-2">Photo from your Google Account</p>
+        <p class="text-xs text-gray-400 mt-2">Photo from your Account</p>
       </div>
 
       <div class="mb-4 text-left">
         <label class="block text-sm text-gray-600 mb-1">Nickname</label>
-        <input v-model="nickname" placeholder="Enter nickname"
-               class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none" />
+        <input 
+          v-model="nickname" 
+          placeholder="Enter nickname"
+          class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none transition" 
+        />
+        <p v-if="isLegacyFound" class="text-xs text-green-600 mt-1 flex items-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+          Found existing name from old system
+        </p>
       </div>
 
       <button @click="saveProfile"
@@ -36,53 +43,78 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { registerUserWithAutoGCM } from "../services/autogcm.js";
+import { supabase } from "../services/supabase.js"; // Import Supabase to save name
 
 const router = useRouter();
+const route = useRoute(); // To access query params
+
 const nickname = ref("");
 const avatar = ref("");
 const isGoogleAvatar = ref(false);
+const isLegacyFound = ref(false);
 
-// Default image if Google image breaks
 const handleImageError = (e) => {
   e.target.src = "https://lassification.oss-cn-shenzhen.aliyuncs.com/static/mini/imgv3/head.png";
 };
 
 onMounted(() => {
-  // 1. Get the temp data we saved in Login.vue
-  const tempUser = JSON.parse(localStorage.getItem("tempGoogleUser") || "{}");
-  
-  if (tempUser.nickname) {
-    nickname.value = tempUser.nickname;
+  // 1. Check for Legacy Name passed from OTP page
+  if (route.query.legacyName && route.query.legacyName !== 'undefined' && route.query.legacyName !== 'User') {
+    nickname.value = route.query.legacyName;
+    isLegacyFound.value = true;
   }
-  
+
+  // 2. Check for Google Temp Data (Optional, if you have Google Login)
+  const tempUser = JSON.parse(localStorage.getItem("tempGoogleUser") || "{}");
   if (tempUser.avatar) {
     avatar.value = tempUser.avatar;
     isGoogleAvatar.value = true;
+  }
+  // Only override nickname from Google if we didn't find a legacy one
+  if (tempUser.nickname && !nickname.value) {
+    nickname.value = tempUser.nickname;
   }
 });
 
 const saveProfile = async () => {
   const phone = localStorage.getItem("pendingPhoneVerified");
-
   if (!nickname.value) return alert("Please enter a nickname.");
 
-  // ✅ Pass the 'avatar.value' as the 4th argument
-  // Signature: registerUserWithAutoGCM(token, phone, nickname, avatarUrl)
-  const response = await registerUserWithAutoGCM("", phone, nickname.value, avatar.value);
+  try {
+    // 1. Register/Update with AutoGCM API
+    const response = await registerUserWithAutoGCM("", phone, nickname.value, avatar.value);
 
-  if (response.code === 200) {
-    // Save the FULL user profile returned by the API
-    localStorage.setItem("autogcmUser", JSON.stringify(response.data));
-    
-    // Clean up temp storage
-    localStorage.removeItem("pendingPhoneVerified");
-    localStorage.removeItem("tempGoogleUser"); 
-    
-    router.push("/home-page");
-  } else {
-    alert("Failed: " + (response.msg || "Unknown Error"));
+    if (response.code === 200) {
+      // 2. Save Session
+      localStorage.setItem("autogcmUser", JSON.stringify(response.data));
+      
+      // 3. Sync to Supabase (Crucial for Admin Panel visibility)
+      const { data: dbUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (dbUser) {
+        await supabase.from('users').update({
+          nickname: nickname.value,
+          avatar_url: avatar.value
+        }).eq('id', dbUser.id);
+      }
+
+      // 4. Cleanup & Redirect
+      localStorage.removeItem("pendingPhoneVerified");
+      localStorage.removeItem("tempGoogleUser");
+      
+      router.push("/registration-complete");
+    } else {
+      alert("Failed: " + (response.msg || "Unknown Error"));
+    }
+  } catch (err) {
+    console.error(err);
+    alert("An error occurred while saving profile.");
   }
 };
 </script>
