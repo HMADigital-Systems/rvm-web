@@ -87,10 +87,21 @@ const saveProfile = async () => {
     const response = await registerUserWithAutoGCM("", phone, nickname.value, avatar.value);
 
     if (response.code === 200) {
-      // 2. Save Session
-      localStorage.setItem("autogcmUser", JSON.stringify(response.data));
+      // 🔴 OLD CODE (Causing the bug):
+      // localStorage.setItem("autogcmUser", JSON.stringify(response.data));
+
+      // 🟢 NEW CODE (Fix):
+      // Manually ensure the specific fields your app needs are set correctly
+      const sessionData = {
+        ...response.data,           // Keep all data from API
+        nikeName: nickname.value,   // FORCE the legacy field name your app uses
+        nickname: nickname.value,   // Set the correct field name too
+        avatarUrl: avatar.value     // Ensure avatar is set
+      };
+
+      localStorage.setItem("autogcmUser", JSON.stringify(sessionData));
       
-      // 3. Sync to Supabase (Crucial for Admin Panel visibility)
+      // 3. Sync to Supabase (Keep this as is)
       const { data: dbUser } = await supabase
         .from('users')
         .select('id')
