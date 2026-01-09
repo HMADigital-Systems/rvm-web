@@ -45,13 +45,13 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { registerUserWithAutoGCM, runOnboarding } from "../services/autogcm.js";
-import { getOrCreateUser } from "../services/supabase.js";
+import { supabase, getOrCreateUser } from "../services/supabase.js"; // ✅ Import supabase client
 
 const router = useRouter();
 const otp = ref(["", "", "", "", "", ""]);
 const isLoading = ref(false);
 const errorMessage = ref("");
-const statusMessage = ref(""); // Granular status updates
+const statusMessage = ref(""); 
 
 onMounted(() => {
   if (!window.confirmationResult) {
@@ -80,7 +80,7 @@ const verifyOTP = async () => {
   
   isLoading.value = true;
   errorMessage.value = "";
-  statusMessage.value = "Verifying Code..."; // 1. Initial State
+  statusMessage.value = "Verifying Code..."; 
 
   try {
     if (!window.confirmationResult) {
@@ -95,13 +95,10 @@ const verifyOTP = async () => {
     let rawPhone = firebaseUser.phoneNumber; 
     let finalPhone = rawPhone.replace('+60', '0');
 
-    // ✅ FIX: DECLARE VARIABLES HERE BEFORE TRY/CATCH BLOCKS
     let response = null;
     let usedPhoneForAutoGCM = finalPhone;
 
-    // ---------------------------------------------------------
-    // 🛡️ THE SAFETY NET (Attempt 1)
-    // ---------------------------------------------------------
+    // 3. Register with AutoGCM (Backends)
     try {
         console.log("👉 Attempt 1: Trying Real Phone:", finalPhone);
         response = await registerUserWithAutoGCM("", finalPhone, "");
@@ -110,15 +107,11 @@ const verifyOTP = async () => {
         response = null; 
     }
 
-    // ---------------------------------------------------------
-    // 🛡️ THE FALLBACK (Attempt 2)
-    // ---------------------------------------------------------
     if (!response || response.code !== 200) {
       const chinesePhone = convertToChineseFormat(finalPhone);
-      
       if (chinesePhone !== finalPhone) {
         console.log(`🔄 Attempt 2: Retrying with Chinese Format: ${chinesePhone}`);
-        statusMessage.value = "Retrying alternative format..."; // Update UI
+        statusMessage.value = "Retrying alternative format..."; 
         try {
             response = await registerUserWithAutoGCM("", chinesePhone, "");
             usedPhoneForAutoGCM = chinesePhone;
@@ -129,34 +122,46 @@ const verifyOTP = async () => {
       }
     }
 
-    // 5. Final Check
     if (!response || response.code !== 200) {
       throw new Error(response ? response.msg : "Unknown Registration Error");
     }
 
     console.log(`✅ Success! Registered as: ${usedPhoneForAutoGCM}`);
-
-    // 6. SAVE SESSION
     localStorage.setItem("autogcmUser", JSON.stringify(response.data));
 
-    statusMessage.value = "Syncing History..."; // 2. Update Message before heavy task
+    statusMessage.value = "Binding Account...";
 
-    // 7. SYNC SUPABASE (Save REAL Phone)
-    const supabaseUser = await getOrCreateUser(finalPhone, "New User", "");
+    // 4. BIND GOOGLE ACCOUNT TO SUPABASE
+    // Retrieve the Google Info we saved in Login.vue
+    const tempGoogleUser = JSON.parse(localStorage.getItem("tempGoogleUser") || "{}");
+    const nameToUse = tempGoogleUser.nickname || "New User";
+    const avatarToUse = tempGoogleUser.avatar || "";
+    const emailToBind = tempGoogleUser.email || null;
 
-    // 8. Run Onboarding (The Heavy Task)
+    // Create/Get user in Supabase
+    const supabaseUser = await getOrCreateUser(finalPhone, nameToUse, avatarToUse);
+
+    // ✅ BIND EMAIL for Smart Login next time
+    if (emailToBind) {
+        await supabase
+            .from('users')
+            .update({ email: emailToBind })
+            .eq('phone', finalPhone);
+        console.log("🔗 Email bound successfully:", emailToBind);
+    }
+    
+    // Clear temp data
+    localStorage.removeItem("tempGoogleUser");
+
+    // 5. Onboarding & Redirect
+    statusMessage.value = "Finalizing..."; 
     await runOnboarding(finalPhone); 
 
-    statusMessage.value = "Finalizing..."; // 3. Almost done
-
-    // 9. Navigate
     if (response.data.isNewUser === 0 && supabaseUser?.nickname && supabaseUser.nickname !== 'New User') {
       router.push("/home-page");
     } else {
       localStorage.setItem("pendingPhoneVerified", finalPhone);
-      
       const legacyName = response.data?.nikeName || response.data?.name || '';
-      
       router.push({ 
         path: "/complete-profile", 
         query: { legacyName: legacyName } 
@@ -165,7 +170,7 @@ const verifyOTP = async () => {
 
   } catch (error) {
       console.error(error);
-      errorMessage.value = error.message; // Show error on screen
+      errorMessage.value = error.message; 
   } finally {
       isLoading.value = false;
       statusMessage.value = "";

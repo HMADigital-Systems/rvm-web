@@ -27,13 +27,12 @@
 <script setup>
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-// 🟢 Import Firebase Auth functions
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import app from "../firebase/firebaseConfig"; // Ensure this path is correct
+import app from "../firebase/firebaseConfig"; 
 
 // Services
 import { syncUser, runOnboarding } from "../services/autogcm.js";
-import { getOrCreateUser } from "../services/supabase.js";
+import { supabase, getOrCreateUser } from "../services/supabase.js"; // ✅ Import supabase client
 
 const router = useRouter();
 const auth = getAuth(app);
@@ -47,49 +46,64 @@ const handleGoogleLogin = async () => {
   errorMessage.value = "";
 
   try {
-    // 1. Firebase Google Sign-In (Replaces the old window.google logic)
+    // 1. Firebase Google Sign-In
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
+    const email = user.email;
 
-    // 2. Save Basic Info locally
+    // 2. CHECK SUPABASE: Is this email already linked?
+    // We check if this email exists in our 'users' table
+    const { data: dbUser, error } = await supabase
+      .from('users')
+      .select('phone, nickname, avatar_url')
+      .eq('email', email)
+      .single();
+
+    if (dbUser && dbUser.phone) {
+      // ✅ USER FOUND: SMART LOGIN (SKIP OTP)
+      console.log("🔹 Smart Login: Email found, logging in as", dbUser.phone);
+      
+      // Sync with RVM System (AutoGCM) to get session token
+      const res = await syncUser(dbUser.phone, "", "");
+      
+      if (res.code === 200 && res.data) {
+        // Save Session
+        localStorage.setItem("autogcmUser", JSON.stringify(res.data));
+        
+        // Ensure Supabase stats are synced
+        await runOnboarding(dbUser.phone);
+
+        router.push("/home-page");
+        return; // Stop here
+      }
+    }
+
+    // 3. NEW USER / NOT LINKED: Proceed to OTP Flow
+    console.log("🔸 New or Unlinked Account: Proceeding to Phone Verification");
+    
     const googleUser = {
       nickname: user.displayName || "User",
       avatar: user.photoURL || "",
-      email: user.email
+      email: user.email // Store email to bind it later
     };
     localStorage.setItem("tempGoogleUser", JSON.stringify(googleUser));
 
-    // 3. Logic: Does this browser remember a linked Phone Number?
+    // Check if we have a legacy phone stored locally, otherwise ask for input
     const existingUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-    const storedPhone = existingUser.phone;
-
-    if (storedPhone) {
-      console.log("📲 Phone found in storage, verifying with RVM system...");
-      
-      // Sync with RVM System (AutoGCM)
-      const res = await syncUser(storedPhone, "", "");
-      
-      if (res.code === 200 && res.data) {
-        localStorage.setItem("autogcmUser", JSON.stringify(res.data));
-        
-        // Sync with Supabase
-        await getOrCreateUser(storedPhone, res.data.nikeName, res.data.avatarUrl);
-        await runOnboarding(storedPhone);
-
-        router.push("/home-page");
-      } else {
-        // If sync fails, maybe the phone number is invalid or system is down
-        throw new Error(res.msg || "RVM Sync Failed");
-      }
+    if (existingUser.phone) {
+       router.push("/verify-phone"); // Or auto-send OTP if you prefer
     } else {
-      // 4. New Device / New User: Redirect to Bind Phone
-      console.log("⚠️ No phone detected locally. Redirecting to Phone Verification.");
-      router.push("/verify-phone");
+       router.push("/verify-phone");
     }
 
   } catch (error) {
     console.error("❌ Login Error:", error);
-    errorMessage.value = "Login failed: " + error.message;
+    // Ignore "PGRST116" error (JSON object requested, multiple (or no) rows returned) - means user not found
+    if (error.code !== "PGRST116") { 
+        errorMessage.value = "Login failed: " + error.message;
+    } else {
+        // If not found, just proceed (this block might not be reached depending on Supabase version, usually .single() returns error if empty)
+    }
   } finally {
     isLoading.value = false;
   }
