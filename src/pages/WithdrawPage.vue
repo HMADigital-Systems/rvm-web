@@ -1,20 +1,19 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useWithdrawal } from '../composables/useWithdrawal'; // Ensure path is correct
+import { useWithdrawal } from '../composables/useWithdrawal';
 import { ArrowLeft } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 
-// Get Phone from Cache
 const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
 const userPhone = localUser.phone; 
 const router = useRouter();
 
-// 🟢 NEW: Destructure 'lifetimeEarnings' here
+// ✅ Destructure lifetimeEarnings
 const { 
   loading, 
   maxWithdrawal, 
   withdrawalHistory, 
-  lifetimeEarnings, // <--- Add this
+  lifetimeEarnings, 
   fetchBalance, 
   submitWithdrawal 
 } = useWithdrawal(userPhone);
@@ -46,17 +45,13 @@ const handleSubmit = async () => {
   <div class="p-4 max-w-md mx-auto space-y-6">
 
     <div class="flex items-center space-x-3 mb-2">
-      <button 
-        @click="router.back()" 
-        class="p-2 rounded-full bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-gray-50 active:scale-95 transition-all"
-      >
+      <button @click="router.back()" class="p-2 rounded-full bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-gray-50 active:scale-95 transition-all">
         <ArrowLeft :size="20" />
       </button>
       <h1 class="text-xl font-bold text-gray-800">Withdraw Points</h1>
     </div>
     
     <div class="bg-gradient-to-r from-blue-600 to-blue-500 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-      
       <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full"></div>
 
       <div class="relative z-10">
@@ -64,7 +59,6 @@ const handleSubmit = async () => {
         <div class="text-4xl font-bold mt-1">{{ loading ? '...' : maxWithdrawal }} pts</div>
         
         <div class="mt-4 pt-3 border-t border-blue-400/30 flex items-center justify-between text-xs text-blue-100">
-            
             <span>Total Lifetime: {{ lifetimeEarnings }}</span>
             
             <span v-if="withdrawalHistory.some(w => w.status === 'PENDING')" class="bg-blue-800/40 px-2 py-1 rounded flex items-center">
