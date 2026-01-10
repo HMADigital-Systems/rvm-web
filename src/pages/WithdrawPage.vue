@@ -1,15 +1,23 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useWithdrawal } from '../composables/useWithdrawal';
+import { useWithdrawal } from '../composables/useWithdrawal'; // Ensure path is correct
 import { ArrowLeft } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 
-// Assuming you store the logged-in phone in localStorage
+// Get Phone from Cache
 const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
 const userPhone = localUser.phone; 
 const router = useRouter();
 
-const { loading, maxWithdrawal, withdrawalHistory, fetchBalance, submitWithdrawal } = useWithdrawal(userPhone);
+// 🟢 NEW: Destructure 'lifetimeEarnings' here
+const { 
+  loading, 
+  maxWithdrawal, 
+  withdrawalHistory, 
+  lifetimeEarnings, // <--- Add this
+  fetchBalance, 
+  submitWithdrawal 
+} = useWithdrawal(userPhone);
 
 const form = ref({
   amount: '',
@@ -29,7 +37,7 @@ const handleSubmit = async () => {
   const success = await submitWithdrawal(amount, form.value);
   if (success) {
     alert("Request Submitted!");
-    form.value.amount = ''; // Reset form
+    form.value.amount = ''; 
   }
 };
 </script>
@@ -56,11 +64,12 @@ const handleSubmit = async () => {
         <div class="text-4xl font-bold mt-1">{{ loading ? '...' : maxWithdrawal }} pts</div>
         
         <div class="mt-4 pt-3 border-t border-blue-400/30 flex items-center justify-between text-xs text-blue-100">
-           <span>Total Lifetime: {{ (Number(maxWithdrawal) + Number(withdrawalHistory.filter(w => w.status === 'PENDING').reduce((s,x)=>s+Number(x.amount),0))).toFixed(0) }}</span>
-           
-           <span v-if="withdrawalHistory.some(w => w.status === 'PENDING')" class="bg-blue-800/40 px-2 py-1 rounded flex items-center">
-             <span class="mr-1">🔒</span> {{ withdrawalHistory.filter(w => w.status === 'PENDING').reduce((s,x)=>s+Number(x.amount),0) }} Reserved
-           </span>
+            
+            <span>Total Lifetime: {{ lifetimeEarnings }}</span>
+            
+            <span v-if="withdrawalHistory.some(w => w.status === 'PENDING')" class="bg-blue-800/40 px-2 py-1 rounded flex items-center">
+              <span class="mr-1">🔒</span> {{ withdrawalHistory.filter(w => w.status === 'PENDING').reduce((s,x)=>s+Number(x.amount),0) }} Reserved
+            </span>
         </div>
       </div>
     </div>
@@ -118,7 +127,7 @@ const handleSubmit = async () => {
             item.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 
             'bg-amber-100 text-amber-700'
          }`">
-           {{ item.status }}
+            {{ item.status }}
          </span>
       </div>
     </div>

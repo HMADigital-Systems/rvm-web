@@ -4,10 +4,12 @@ import { supabase, getOrCreateUser, getMerchantId } from '../services/supabase';
 export function useWithdrawal(phone) {
   const loading = ref(false);
   
-  // ✅ LOAD CACHE
   const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-  const maxWithdrawal = ref(localUser.cachedBalance || 0); // Start with cached balance
+  const maxWithdrawal = ref(localUser.cachedBalance || 0);
   
+  // 🟢 NEW: Add a ref for Lifetime Earnings
+  const lifetimeEarnings = ref(0);
+
   const withdrawalHistory = ref([]);
   const userUuid = ref(null);
   const merchantBalances = ref({}); 
@@ -19,35 +21,29 @@ export function useWithdrawal(phone) {
       if (!dbUser) throw new Error("User not found");
       userUuid.value = dbUser.id;
 
+      // ... (Existing Promise.all fetching logic remains the same) ...
       const [earningsRes, withdrawalsRes, legacyTransRes, platformId] = await Promise.all([
-        supabase.from('submission_reviews')
-          .select('merchant_id, calculated_value')
-          .eq('user_id', userUuid.value)
-          .neq('status', 'REJECTED'),
-        supabase.from('withdrawals')
-          .select('merchant_id, amount, status, created_at, bank_name, account_number')
-          .eq('user_id', userUuid.value)
-          .neq('status', 'REJECTED')
-          .order('created_at', { ascending: false }),
-        supabase.from('wallet_transactions')
-          .select('merchant_id, amount')
-          .eq('user_id', userUuid.value)
-          .lt('amount', 0),
+        supabase.from('submission_reviews').select('merchant_id, calculated_value').eq('user_id', userUuid.value).neq('status', 'REJECTED'),
+        supabase.from('withdrawals').select('merchant_id, amount, status, created_at, bank_name, account_number').eq('user_id', userUuid.value).neq('status', 'REJECTED').order('created_at', { ascending: false }),
+        supabase.from('wallet_transactions').select('merchant_id, amount').eq('user_id', userUuid.value).lt('amount', 0),
         getMerchantId()
       ]);
 
       const balances = {};
-      let totalLifetime = 0;
+      let totalLifetimeCalc = 0; // Temp variable
 
-      // ... (Calculation logic remains exactly the same) ...
+      // 1. Add Earnings
       (earningsRes.data || []).forEach(item => {
         const mId = item.merchant_id;
         const pts = Number(item.calculated_value || 0);
         if (!balances[mId]) balances[mId] = 0;
         balances[mId] += pts;
-        totalLifetime += pts;
+        
+        // Sum up total lifetime here
+        totalLifetimeCalc += pts;
       });
 
+      // ... (Rest of calculation logic remains the same) ...
       (withdrawalsRes.data || []).forEach(item => {
         const mId = item.merchant_id;
         const amt = Number(item.amount || 0);
@@ -75,15 +71,18 @@ export function useWithdrawal(phone) {
       merchantBalances.value = balances;
       maxWithdrawal.value = totalAvailable.toFixed(2);
       withdrawalHistory.value = withdrawalsRes.data || [];
+      
+      // 🟢 NEW: Set the exposed value
+      lifetimeEarnings.value = totalLifetimeCalc.toFixed(2);
 
-      // ✅ UPDATE CACHE
+      // Cache Updates...
       const cache = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
       cache.cachedBalance = maxWithdrawal.value;
       localStorage.setItem("autogcmUser", JSON.stringify(cache));
 
       // Update User DB
       await supabase.from('users')
-        .update({ lifetime_integral: totalLifetime, last_synced_at: new Date() })
+        .update({ lifetime_integral: totalLifetimeCalc, last_synced_at: new Date() })
         .eq('id', userUuid.value);
 
     } catch (err) {
@@ -93,8 +92,9 @@ export function useWithdrawal(phone) {
     }
   };
 
+  // ... (submitWithdrawal logic remains the same) ...
   const submitWithdrawal = async (amount, bankDetails) => {
-    // ... (Keep existing submit logic) ...
+    // ... same code as before ...
     const reqAmount = Number(amount);
     if (reqAmount <= 0) return alert("Invalid amount");
     if (reqAmount > Number(maxWithdrawal.value)) return alert("Insufficient balance!");
@@ -136,5 +136,6 @@ export function useWithdrawal(phone) {
     }
   };
 
-  return { loading, maxWithdrawal, withdrawalHistory, fetchBalance, submitWithdrawal };
+  // 🟢 NEW: Return lifetimeEarnings
+  return { loading, maxWithdrawal, withdrawalHistory, lifetimeEarnings, fetchBalance, submitWithdrawal };
 }
