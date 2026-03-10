@@ -1,7 +1,4 @@
 {
-  "install": {
-    "cache": false
-  },
   "rewrites": [
     {
       "source": "/((?!api/.*|@.*|.*\\..*).*)",
