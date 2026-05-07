@@ -7,9 +7,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY
 );
 
+// Strip # from instance ID if present (axios treats # as URL fragment)
 const WAAPI_URL = "https://waapi.app/api/v1/instances";
-const WAAPI_ID = process.env.WAAPI_INSTANCE_ID;
-const WAAPI_TOKEN = process.env.WAAPI_TOKEN;
+const WAAPI_ID = (process.env.WAAPI_INSTANCE_ID || '').replace('#', '').trim();
+const WAAPI_TOKEN = (process.env.WAAPI_TOKEN || '').trim();
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -71,14 +72,15 @@ export default async function handler(req, res) {
         );
         console.log("WaAPI response:", waRes.status, waRes.data);
       } catch (waErr) {
-        console.error("WaAPI send failed:", waErr.response?.data || waErr.message);
+        const waDetail = waErr.response?.data || waErr.message;
+        console.error("WaAPI send failed:", JSON.stringify(waDetail));
         // If WaAPI fails, still show the OTP on screen as fallback
         return res.status(200).json({ 
           success: true, 
           msg: "OTP generated",
-          otp: generatedOtp,  // ⚠️ Remove this for production — shows OTP in dev mode for testing
+          otp: generatedOtp,
           waFailed: true,
-          waError: waErr.response?.data?.message || "WhatsApp delivery failed"
+          waError: typeof waDetail === 'object' ? JSON.stringify(waDetail) : String(waDetail)
         });
       }
 
