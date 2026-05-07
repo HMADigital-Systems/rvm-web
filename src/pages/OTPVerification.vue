@@ -3,7 +3,13 @@
     <div class="bg-white shadow-lg rounded-2xl p-8 w-full max-w-md text-center">
       
       <h2 class="text-2xl font-semibold text-gray-800 mb-2">{{ t('otp.title') }}</h2>
-      <p class="text-sm text-gray-500 mb-6">{{ t('otp.subtitle') }}</p> 
+      <p class="text-sm text-gray-500 mb-6">{{ t('otp.subtitle') }}</p>
+
+      <!-- Fallback OTP if WhatsApp failed -->
+      <div v-if="showFallbackOtp && fallbackOtp" class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <p class="text-xs text-amber-700 mb-1">⚠️ WhatsApp delivery failed. Your code:</p>
+        <p class="text-2xl font-bold text-amber-800 tracking-widest">{{ fallbackOtp }}</p>
+      </div>
 
       <div class="flex justify-center gap-2 mb-6">
         <input 
@@ -52,7 +58,9 @@ const router = useRouter();
 const otp = ref(["", "", "", "", "", ""]);
 const isLoading = ref(false);
 const errorMessage = ref("");
-const statusMessage = ref(""); 
+const statusMessage = ref("");
+const fallbackOtp = ref(localStorage.getItem("pendingOtp") || "");
+const showFallbackOtp = ref(!!fallbackOtp.value);
 
 onMounted(() => {
   // Check if we have a phone number pending (Stored in PhoneVerification.vue)
@@ -193,6 +201,7 @@ const verifyOTP = async () => {
     // Clear temp data
     localStorage.removeItem("tempGoogleUser");
     localStorage.removeItem("pendingPhone"); // Clear OTP phone
+    localStorage.removeItem("pendingOtp"); // Clear fallback OTP
 
     // 5. Onboarding & Redirect Logic
     // ----------------------------------------------------------------

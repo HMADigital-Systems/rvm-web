@@ -70,13 +70,19 @@ const sendOTP = async () => {
     console.log("📤 Sending OTP to:", fullPhone);
 
     // 2. Call Your Backend API
-    await axios.post('/api/auth-otp', {
+    const resp = await axios.post('/api/auth-otp', {
       action: 'send',
       phone: fullPhone
     });
 
     // 3. Save the WaAPI format phone number to local storage for verification step
     localStorage.setItem("pendingPhone", fullPhone);
+
+    // If WhatsApp failed but OTP was generated, save OTP for fallback display
+    if (resp.data?.waFailed && resp.data?.otp) {
+      localStorage.setItem("pendingOtp", resp.data.otp);
+      console.log("⚠️ WhatsApp failed, OTP fallback:", resp.data.otp);
+    }
 
     console.log("✅ OTP sent");
     router.push("/enter-otp");

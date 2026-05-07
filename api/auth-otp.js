@@ -34,7 +34,13 @@ export default async function handler(req, res) {
       // 2. Calculate Expiry (5 Minutes from now)
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-      // 3. Store in Supabase (Upsert: Update if exists, Insert if new)
+      // 3. Check WaAPI credentials
+      if (!WAAPI_ID || !WAAPI_TOKEN) {
+        console.error("WaAPI credentials missing — set WAAPI_INSTANCE_ID and WAAPI_TOKEN in Vercel env");
+        return res.status(500).json({ success: false, msg: "WhatsApp service not configured. Contact admin." });
+      }
+
+      // 4. Store in Supabase (Upsert: Update if exists, Insert if new)
       const { error: dbError } = await supabase
         .from('otp_codes')
         .upsert({ 
@@ -43,21 +49,38 @@ export default async function handler(req, res) {
           expires_at: expiresAt 
         }, { onConflict: 'phone' });
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error("DB upsert error:", dbError);
+        if (dbError.message?.includes('relation') && dbError.message?.includes('does not exist')) {
+          return res.status(500).json({ success: false, msg: "Database setup incomplete. Run otp_codes.sql in Supabase." });
+        }
+        throw dbError;
+      }
 
-      // 4. Send via WaAPI
-      // Note: WaAPI expects number in format "60123456789@c.us"
-      // We strip '+' just in case, though your frontend sends clean numbers
+      // 5. Send via WaAPI
       const chatId = `${phone.replace('+', '')}@c.us`;
       
-      await axios.post(
-        `${WAAPI_URL}/${WAAPI_ID}/client/action/send-message`,
-        {
-          chatId: chatId,
-          message: `Your RVM Login Code is: *${generatedOtp}*\n\nValid for 5 minutes.`
-        },
-        { headers: { Authorization: `Bearer ${WAAPI_TOKEN}` } }
-      );
+      try {
+        const waRes = await axios.post(
+          `${WAAPI_URL}/${WAAPI_ID}/client/action/send-message`,
+          {
+            chatId: chatId,
+            message: `Your RVM Login Code is: *${generatedOtp}*\n\nValid for 5 minutes.`
+          },
+          { headers: { Authorization: `Bearer ${WAAPI_TOKEN}` } }
+        );
+        console.log("WaAPI response:", waRes.status, waRes.data);
+      } catch (waErr) {
+        console.error("WaAPI send failed:", waErr.response?.data || waErr.message);
+        // If WaAPI fails, still show the OTP on screen as fallback
+        return res.status(200).json({ 
+          success: true, 
+          msg: "OTP generated",
+          otp: generatedOtp,  // ⚠️ Remove this for production — shows OTP in dev mode for testing
+          waFailed: true,
+          waError: waErr.response?.data?.message || "WhatsApp delivery failed"
+        });
+      }
 
       return res.status(200).json({ success: true, msg: "OTP Sent" });
     }

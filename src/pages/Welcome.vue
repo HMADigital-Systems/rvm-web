@@ -4,25 +4,29 @@
     <LanguageSelector />
 
     <!-- 🟢 Logo and Tagline -->
-    <main class="flex flex-col items-center justify-center flex-grow px-6 text-center md:px-20 lg:px-40">
+    <main class="flex flex-col items-center justify-center flex-grow px-6 text-center md:px-20 lg:px-40 -mt-16">
 
-      <img
-        src="/icons/logo.png"
-        alt="App Logo"
-        class="w-64 h-64 mb-6 md:w-80 md:h-80 animate-fadeIn"
-      />
-      <h1 class="text-3xl md:text-4xl font-bold text-green-700">{{ t("title") }}</h1>
-      <p class="text-gray-600 mt-3 text-base md:text-lg md:max-w-2xl lg:max-w-3xl">
+      <div class="relative">
+        <img
+          src="/icons/logo.png"
+          alt="Smart RVM"
+          class="w-48 h-48 md:w-64 md:h-64 animate-fadeIn drop-shadow-lg"
+          @error="onLogoError"
+        />
+      </div>
+      <h1 class="text-3xl md:text-4xl font-bold text-green-700 mt-2">{{ t("title") }}</h1>
+      <p class="text-gray-500 mt-2 text-base md:text-lg max-w-sm">
         {{ t("tagline") }}
       </p>
 
-      <!-- 🚀 Button -->
-      <button
-        @click="goToLogin"
-        class="mt-8 bg-green-600 text-white px-10 py-3 rounded-full text-lg font-medium shadow hover:bg-green-700 transition transform hover:scale-105"
-      >
-        {{ t("get_started_button") }}
-      </button>
+      <div class="mt-10 w-full max-w-xs space-y-3">
+        <button
+          @click="goToLogin"
+          class="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-3.5 rounded-full text-base font-semibold shadow-lg hover:shadow-xl hover:from-green-600 hover:to-green-700 transition-all duration-300 active:scale-[0.98]"
+        >
+          {{ t("get_started_button") }}
+        </button>
+      </div>
     </main>
 
     <!-- ⚙️ Footer -->
@@ -33,12 +37,16 @@
 </template>
 
 <script setup>
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import LanguageSelector from "../components/LanguageSelector.vue";
 
 const router = useRouter();
 const { t } = useI18n();
+
+const logoError = ref(false);
+const onLogoError = () => { logoError.value = true; };
 
 const goToLogin = () => {
   router.push("/login");
