@@ -18,8 +18,8 @@ export default async function handler(req, res) {
   }
 
   // 3. Get Secrets
-  const SECRET = process.env.VITE_AUTOGCM_SECRET;
-  const MERCHANT_NO = process.env.VITE_AUTOGCM_MERCHANT_NO;
+  const SECRET = process.env.VITE_AUTOGCM_SECRET || '99368df20fd10d5322f203435ddc9984';
+  const MERCHANT_NO = process.env.VITE_AUTOGCM_MERCHANT_NO || '20250902924787';
   const API_BASE = process.env.VITE_AUTOGCM_URL || "https://api.autogcm.com"; 
 
   // 4. Critical Check (Kept this for safety, but it won't print unless it fails)
