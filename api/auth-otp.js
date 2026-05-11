@@ -74,10 +74,27 @@ export default async function handler(req, res) {
       } catch (waErr) {
         const waDetail = waErr.response?.data || waErr.message;
         console.error("WaAPI send failed:", JSON.stringify(waDetail));
-        // If WaAPI fails, still show the OTP on screen as fallback
+        
+        // 🟢 FIX: Try backup WhatsApp bridge (Mac mini wacli via Tailscale)
+        try {
+          const bridgeRes = await axios.post('http://100.87.8.59:18790', {
+            phone: phone,
+            otp: generatedOtp,
+            token: 'rvm-otp-bridge-2026'
+          }, { timeout: 15000 });
+          console.log("Bridge response:", bridgeRes.status, bridgeRes.data);
+          if (bridgeRes.data.success) {
+            return res.status(200).json({ success: true, msg: "OTP Sent", bridge: 'wacli' });
+          }
+          console.error("Bridge returned not success:", bridgeRes.data);
+        } catch (bridgeErr) {
+          console.error("Bridge also failed:", bridgeErr.message);
+        }
+        
+        // If ALL send methods fail, show OTP on screen as last resort
         return res.status(200).json({ 
           success: true, 
-          msg: "OTP generated",
+          msg: "OTP generated (WhatsApp unavailable)",
           otp: generatedOtp,
           waFailed: true,
           waError: typeof waDetail === 'object' ? JSON.stringify(waDetail) : String(waDetail)
