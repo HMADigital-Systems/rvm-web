@@ -161,17 +161,17 @@ const handleGoogleLogin = async () => {
       }
     }
 
-    // 3. NEW USER (No email match)
-    console.log("🔸 New or Unlinked Account: Proceeding to Phone Verification");
+    // 3. NEW USER (No email match) — skip phone verification, go to home directly
+    console.log("🔸 New Google User — skipping phone, going home");
     
     const googleUser = {
       nickname: user.displayName || "User",
       avatar: user.photoURL || "",
-      email: user.email 
+      email: user.email
     };
-    localStorage.setItem("tempGoogleUser", JSON.stringify(googleUser));
+    localStorage.setItem("autogcmUser", JSON.stringify(googleUser));
 
-    router.push("/verify-phone");
+    router.push("/home-page");
 
   } catch (error) {
     console.error("❌ Login Error:", error);
