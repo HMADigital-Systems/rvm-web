@@ -10,6 +10,7 @@ import Profile from "../pages/Profile.vue";
 import UserDashboard from "../pages/UserDashboard.vue";
 import WithdrawPage from "../pages/WithdrawPage.vue";
 import MachineDetailsPage from '../pages/MachineDetailsPage.vue';
+import ComingSoon from '../pages/ComingSoon.vue';
 
 const routes = [
   { 
@@ -70,6 +71,22 @@ const routes = [
   { path: '/machine/:deviceNo', 
     component: MachineDetailsPage, 
     meta: { title: 'Machine Details' } 
+  },
+  // Coming Soon Pages
+  { 
+    path: '/mygreenshop', 
+    component: ComingSoon,
+    meta: { title: 'MyGreenShop' } 
+  },
+  { 
+    path: '/market', 
+    component: ComingSoon,
+    meta: { title: 'Market' } 
+  },
+  { 
+    path: '/on-demand-collection', 
+    component: ComingSoon,
+    meta: { title: 'On-Demand Collection' } 
   },
 ];
 
