@@ -50,6 +50,7 @@ import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { registerUserWithAutoGCM, runOnboarding } from "../services/autogcm.js";
 import { getOrCreateUser } from "../services/supabase.js"; 
+import { normalizePhone } from "../utils/phone-utils.js";
 import { useI18n } from "vue-i18n";
 import axios from "axios";
 

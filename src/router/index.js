@@ -13,96 +13,28 @@ import MachineDetailsPage from '../pages/MachineDetailsPage.vue';
 import ComingSoon from '../pages/ComingSoon.vue';
 
 const routes = [
-  { 
-    path: "/", 
-    component: Welcome,
-    meta: { title: 'Welcome' } 
-  },
-  { 
-    path: "/login", 
-    component: Login,
-    meta: { title: 'Login' } 
-  },
-  { 
-    path: "/verify-phone", 
-    component: PhoneVerification,
-    meta: { title: 'Verify Phone' } 
-  },
-  { 
-    path: "/complete-profile", 
-    component: CompleteProfile,
-    meta: { title: 'Complete Profile' } 
-  },
-  { 
-    path: "/enter-otp", 
-    component: OTPVerification,
-    meta: { title: 'Enter OTP' } 
-  },
-  { 
-    path: "/register-success", 
-    component: RegistrationComplete,
-    meta: { title: 'Registration Complete' } 
-  },
-  { 
-    path: '/registration-complete', 
-    component: RegistrationComplete,
-    meta: { title: 'Registration Complete' } 
-  }, 
-  { 
-    path: "/home-page", 
-    component: Homepage,
-    meta: { title: 'Home' } 
-  },
-  { 
-    path: "/profile", 
-    component: Profile,
-    meta: { title: 'My Profile' } 
-  },
-  { 
-    path: "/dashboard", 
-    component: UserDashboard,
-    meta: { title: 'Dashboard' } 
-  },
-  { 
-    path: "/withdraw", 
-    component: WithdrawPage,
-    meta: { title: 'Withdraw Funds' } 
-  },
-  { path: '/machine/:deviceNo', 
-    component: MachineDetailsPage, 
-    meta: { title: 'Machine Details' } 
-  },
-  // Coming Soon Pages
-  { 
-    path: '/mygreenshop', 
-    component: ComingSoon,
-    meta: { title: 'MyGreenShop' } 
-  },
-  { 
-    path: '/market', 
-    component: ComingSoon,
-    meta: { title: 'Market' } 
-  },
-  { 
-    path: '/on-demand-collection', 
-    component: ComingSoon,
-    meta: { title: 'On-Demand Collection' } 
-  },
+  { path: "/", component: Welcome, meta: { title: 'Welcome' } },
+  { path: "/login", component: Login, meta: { title: 'Login' } },
+  { path: "/verify-phone", component: PhoneVerification, meta: { title: 'Verify Phone' } },
+  { path: "/complete-profile", component: CompleteProfile, meta: { title: 'Complete Profile' } },
+  { path: "/enter-otp", component: OTPVerification, meta: { title: 'Enter OTP' } },
+  { path: "/register-success", component: RegistrationComplete, meta: { title: 'Registration Complete' } },
+  { path: '/registration-complete', component: RegistrationComplete, meta: { title: 'Registration Complete' } },
+  { path: "/home-page", component: Homepage, meta: { title: 'Home' } },
+  { path: "/profile", component: Profile, meta: { title: 'My Profile' } },
+  { path: "/dashboard", component: UserDashboard, meta: { title: 'Dashboard' } },
+  { path: "/withdraw", component: WithdrawPage, meta: { title: 'Withdraw Funds' } },
+  { path: '/machine/:deviceNo', component: MachineDetailsPage, meta: { title: 'Machine Details' } },
+  { path: '/mygreenshop', component: ComingSoon, meta: { title: 'MyGreenShop' } },
+  { path: '/market', component: ComingSoon, meta: { title: 'Market' } },
+  { path: '/on-demand-collection', component: ComingSoon, meta: { title: 'On-Demand Collection' } },
 ];
 
-const router = createRouter({
-  history: createWebHistory(),
-  routes,
-});
+const router = createRouter({ history: createWebHistory(), routes });
 
-// 🚀 DYNAMIC TITLE LOGIC
 router.beforeEach((to, from, next) => {
-  const defaultTitle = "Smart RVM"; // The base name of your app
-  
-  // If the route has a title, format it as "Page Name | Smart RVM"
-  // Otherwise, just use "Smart RVM"
+  const defaultTitle = "Smart RVM";
   document.title = to.meta.title ? `${to.meta.title} | ${defaultTitle}` : defaultTitle;
-  
   next();
 });
 

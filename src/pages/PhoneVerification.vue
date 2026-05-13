@@ -34,6 +34,7 @@ import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import axios from "axios"; 
+import { normalizePhone } from "../utils/phone-utils.js";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -51,21 +52,8 @@ const sendOTP = async () => {
   errorMessage.value = "";
 
   try {
-    // 1. Format for WaAPI (Must start with 60 for Malaysia)
-    // Remove non-digits
-    const cleanPhone = phone.value.replace(/\D/g, ''); 
-    
-    // Ensure it starts with 60. 
-    // If user typed '012...', cleanPhone is '012...'. We remove leading '0' and add '60'.
-    // If user typed '12...', cleanPhone is '12...'. We add '60'.
-    let fullPhone = "";
-    if (cleanPhone.startsWith('0')) {
-        fullPhone = '60' + cleanPhone.substring(1);
-    } else if (cleanPhone.startsWith('60')) {
-        fullPhone = cleanPhone;
-    } else {
-        fullPhone = '60' + cleanPhone;
-    }
+    // 1. Normalize phone using shared utility
+    const fullPhone = normalizePhone(phone.value);
 
     console.log("📤 Sending OTP to:", fullPhone);
 

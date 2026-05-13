@@ -46,7 +46,8 @@ import { ref, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { registerUserWithAutoGCM } from "../services/autogcm.js";
 // 🔴 FIX 1: Import 'getOrCreateUser' correctly
-import { supabase, getOrCreateUser } from "../services/supabase.js"; 
+import { supabase, getOrCreateUser } from "../services/supabase.js";
+import { normalizePhone } from "../utils/phone-utils.js";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();

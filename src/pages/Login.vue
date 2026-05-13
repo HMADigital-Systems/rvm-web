@@ -12,8 +12,6 @@
 
     <!-- Login Card -->
     <div class="relative z-10 w-full max-w-sm bg-white/85 backdrop-blur-xl rounded-2xl border border-white/50 shadow-[0_8px_40px_rgba(22,163,74,0.12)] px-6 py-8 animate-[cardIn_0.6s_ease-out]">
-      
-
 
       <!-- Logo & Branding -->
       <div class="text-center mb-8">
@@ -81,8 +79,8 @@
         </p>
       </div>
 
-      <!-- Step 2: Phone Collection for Google Users (when email not found in DB) -->
-      <div v-if="showGooglePhoneStep">
+      <!-- Step 2: Phone Collection for Google Users -->
+      <div v-if="showGooglePhoneStep && !showPhoneConflictPrompt">
         <div class="text-center mb-4">
           <div class="w-14 h-14 mx-auto mb-3 bg-green-100 rounded-full flex items-center justify-center">
             <svg class="w-7 h-7 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -127,6 +125,49 @@
           </button>
         </div>
       </div>
+
+      <!-- Step 3: Phone Mismatch Prompt -->
+      <div v-if="showPhoneConflictPrompt">
+        <div class="text-center mb-4">
+          <div class="w-14 h-14 mx-auto mb-3 bg-amber-100 rounded-full flex items-center justify-center">
+            <svg class="w-7 h-7 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <h2 class="text-lg font-bold text-gray-800">Phone Number Conflict</h2>
+          <p class="text-sm text-gray-600 mt-2">
+            This email ({{ pendingGoogleData?.email }}) is already linked to 
+            <strong>{{ formatPhoneDisplay(conflictingPhone) }}</strong>.
+          </p>
+          <p class="text-xs text-gray-500 mt-1">
+            Do you want to update it to <strong>{{ formatPhoneDisplay(googlePhone) }}</strong> instead?
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-3 mt-4">
+          <button 
+            @click="confirmPhoneUpdate"
+            :disabled="googlePhoneLoading"
+            class="flex items-center justify-center gap-2 w-full py-3 px-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl text-sm font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-60"
+          >
+            <svg v-if="googlePhoneLoading" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <template v-else>✅ Yes, update to {{ formatPhoneDisplay(googlePhone) }}</template>
+          </button>
+          <button 
+            @click="keepExistingPhone"
+            class="flex items-center justify-center gap-2 w-full py-3 px-4 bg-white border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-all"
+          >
+            ❌ No, keep {{ formatPhoneDisplay(conflictingPhone) }}
+          </button>
+        </div>
+
+        <div class="text-center mt-4">
+          <button @click="cancelGooglePhoneLink" class="text-xs text-gray-400 hover:text-gray-600 underline">
+            Back to login
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -138,9 +179,12 @@ import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import app from "../firebase/firebaseConfig"; 
 import { useI18n } from "vue-i18n";
 
+// Utility
+import { normalizePhone, formatPhone } from "../utils/phone-utils.js";
+
 // Services
 import { syncUser, runOnboarding } from "../services/autogcm.js";
-import { supabase } from "../services/supabase.js"; 
+import { supabase, getUserByEmail, checkEmailPhoneConflict, upsertUserByEmail } from "../services/supabase.js"; 
 
 const { t } = useI18n();
 const router = useRouter();
@@ -159,6 +203,15 @@ const googlePhoneLoading = ref(false);
 const googlePhoneError = ref("");
 let pendingGoogleData = null; // Stores Google user info for linking
 
+// Phone conflict prompt
+const showPhoneConflictPrompt = ref(false);
+const conflictingPhone = ref("");
+
+const formatPhoneDisplay = (p) => {
+  const f = formatPhone(p);
+  return f || p;
+};
+
 const isGenericName = (name, phone) => {
   if (!name) return true;
   const lower = name.toLowerCase();
@@ -176,17 +229,23 @@ const handleGoogleLogin = async () => {
   errorMessage.value = "";
 
   try {
+    // 1. Get Google user info
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
     const email = user.email;
 
-    const { data: dbUser, error } = await supabase
-      .rpc('get_user_by_email', { check_email: email });
+    if (!email) {
+      errorMessage.value = "Google account has no email. Please use phone OTP instead.";
+      isLoading.value = false;
+      return;
+    }
 
-    if (error) console.error("RPC Error:", error);
+    // 2. Look up by EMAIL (authoritative primary UID)
+    const dbUser = await getUserByEmail(email);
 
     if (dbUser && dbUser.phone) {
-      console.log("🔹 Smart Login: Email found, logging in as", dbUser.phone);
+      // 🔹 Email found in DB with phone → smart login
+      console.log("🔹 Email found: logging in as", dbUser.phone);
       
       const isAlreadyOnboarded = !!dbUser.vendor_user_no;
       const currentLocalName = dbUser.nickname || "";
@@ -224,7 +283,9 @@ const handleGoogleLogin = async () => {
       }
     }
 
-    console.log("🔸 Google User not in DB — ask for phone to link");
+    // 3. Email found but no phone → OR email not found
+    //    Store Google info, ask user for their phone number
+    console.log("🔸 Google User needs phone linking — asking for phone");
     pendingGoogleData = {
       nickname: user.displayName || "User",
       avatar: user.photoURL || "",
@@ -251,56 +312,29 @@ const handleGoogleLinkPhone = async () => {
   }
   googlePhoneLoading.value = true;
   googlePhoneError.value = "";
+  conflictingPhone.value = "";
 
   try {
-    // Format phone
-    let formattedPhone = googlePhone.value;
-    if (formattedPhone.startsWith('0')) formattedPhone = '60' + formattedPhone.substring(1);
-    else if (!formattedPhone.startsWith('60')) formattedPhone = '60' + formattedPhone;
+    // 1. Normalize the phone number
+    const normalizedPhone = normalizePhone(googlePhone.value);
 
-    // Try to find existing user by phone, or create one with email linked
-    const { data: existingUser, error: lookupErr } = await supabase
-      .rpc('upsert_user_by_phone', {
-        p_phone: formattedPhone,
-        p_nickname: pendingGoogleData?.nickname || '',
-        p_avatar_url: pendingGoogleData?.avatar || '',
-        p_email: pendingGoogleData?.email || ''
-      });
+    // 2. Check for phone conflict: does this email already have a DIFFERENT phone?
+    const existingPhone = await checkEmailPhoneConflict(
+      pendingGoogleData?.email, 
+      normalizedPhone
+    );
 
-    if (lookupErr) {
-      console.error("Phone link RPC error:", lookupErr);
-      googlePhoneError.value = "Could not link account. Please try again.";
+    if (existingPhone && existingPhone !== normalizedPhone) {
+      // ⚠️ CONFLICT! This email is linked to a different phone number
+      // Show the prompt instead of silently overwriting
+      conflictingPhone.value = existingPhone;
+      showPhoneConflictPrompt.value = true;
       googlePhoneLoading.value = false;
       return;
     }
 
-    // Sync with vendor API
-    const res = await syncUser(formattedPhone, pendingGoogleData?.nickname, undefined);
-
-    if (res.code === 200 && res.data) {
-      const sessionData = {
-        ...res.data,
-        nikeName: pendingGoogleData?.nickname || res.data.nikeName || "User",
-        avatarUrl: pendingGoogleData?.avatar || res.data.avatarUrl || "",
-        userId: formattedPhone,
-        uid: formattedPhone
-      };
-      localStorage.setItem("autogcmUser", JSON.stringify(sessionData));
-      localStorage.setItem("pendingPhoneVerified", formattedPhone);
-      
-      await runOnboarding(formattedPhone);
-      router.push("/home-page");
-    } else {
-      // Fallback: save bare phone + google data
-      const googleUser = {
-        ...pendingGoogleData,
-        phone: formattedPhone,
-        phonenumber: formattedPhone,
-        userId: formattedPhone
-      };
-      localStorage.setItem("autogcmUser", JSON.stringify(googleUser));
-      router.push("/home-page");
-    }
+    // 3. No conflict — proceed with linking using EMAIL as primary UID
+    await proceedWithLink(normalizedPhone);
 
   } catch (err) {
     console.error("Google phone link error:", err);
@@ -310,10 +344,106 @@ const handleGoogleLinkPhone = async () => {
   }
 };
 
+// Proceed with linking (after conflict resolved or no conflict)
+const proceedWithLink = async (normalizedPhone) => {
+  try {
+    // Use EMAIL-first upsert (email is the primary key)
+    const userData = await upsertUserByEmail(pendingGoogleData.email, {
+      phone: normalizedPhone,
+      nickname: pendingGoogleData?.nickname || '',
+      avatarUrl: pendingGoogleData?.avatar || '',
+      fullName: pendingGoogleData?.nickname || ''
+    });
+
+    // Sync with vendor API
+    const res = await syncUser(normalizedPhone, pendingGoogleData?.nickname, undefined);
+
+    if (res.code === 200 && res.data) {
+      const sessionData = {
+        ...res.data,
+        nikeName: pendingGoogleData?.nickname || res.data.nikeName || "User",
+        avatarUrl: pendingGoogleData?.avatar || res.data.avatarUrl || "",
+        userId: normalizedPhone,
+        uid: normalizedPhone
+      };
+      localStorage.setItem("autogcmUser", JSON.stringify(sessionData));
+      localStorage.setItem("pendingPhoneVerified", normalizedPhone);
+      
+      await runOnboarding(normalizedPhone);
+      router.push("/home-page");
+    } else {
+      // Fallback: save bare phone + google data
+      const googleUser = {
+        ...pendingGoogleData,
+        phone: normalizedPhone,
+        phonenumber: normalizedPhone,
+        userId: normalizedPhone
+      };
+      localStorage.setItem("autogcmUser", JSON.stringify(googleUser));
+      router.push("/home-page");
+    }
+  } catch (err) {
+    console.error("Link proceed error:", err);
+    googlePhoneError.value = "Could not link account. Please try again.";
+  }
+};
+
+// User confirmed they want to UPDATE the phone
+const confirmPhoneUpdate = async () => {
+  googlePhoneLoading.value = true;
+  try {
+    const normalizedPhone = normalizePhone(googlePhone.value);
+    await proceedWithLink(normalizedPhone);
+  } catch (err) {
+    console.error("Phone update error:", err);
+    googlePhoneError.value = "Failed to update. Please try again.";
+  } finally {
+    googlePhoneLoading.value = false;
+  }
+};
+
+// User wants to KEEP the existing phone
+const keepExistingPhone = () => {
+  // Just log in with the existing phone
+  showPhoneConflictPrompt.value = false;
+  
+  // Use the conflicting phone (existing one in DB) for login
+  const existingPhone = conflictingPhone.value;
+  
+  (async () => {
+    isLoading.value = true;
+    try {
+      const res = await syncUser(existingPhone, pendingGoogleData?.nickname, pendingGoogleData?.avatar);
+      
+      if (res.code === 200 && res.data) {
+        const sessionData = {
+          ...res.data,
+          nikeName: pendingGoogleData?.nickname || res.data.nikeName || "User",
+          avatarUrl: pendingGoogleData?.avatar || res.data.avatarUrl || "",
+          userId: existingPhone,
+          uid: existingPhone
+        };
+        localStorage.setItem("autogcmUser", JSON.stringify(sessionData));
+        localStorage.setItem("pendingPhoneVerified", existingPhone);
+        
+        await runOnboarding(existingPhone);
+        router.push("/home-page");
+      }
+    } catch (err) {
+      console.error("Keep existing phone login failed:", err);
+      errorMessage.value = "Login failed. Please try again.";
+    } finally {
+      isLoading.value = false;
+    }
+  })();
+};
+
 const cancelGooglePhoneLink = () => {
   showGooglePhoneStep.value = false;
+  showPhoneConflictPrompt.value = false;
   googlePhone.value = "";
   googlePhoneError.value = "";
+  conflictingPhone.value = "";
   pendingGoogleData = null;
   errorMessage.value = "";
   isLoading.value = false;
@@ -327,9 +457,7 @@ const handlePhoneLogin = async () => {
   phoneLoading.value = true;
   errorMessage.value = "";
   try {
-    let formattedPhone = phone.value;
-    if (formattedPhone.startsWith('0')) formattedPhone = '60' + formattedPhone.substring(1);
-    else if (!formattedPhone.startsWith('60')) formattedPhone = '60' + formattedPhone;
+    const formattedPhone = normalizePhone(phone.value);
     
     const { default: axios } = await import('axios');
     const res = await axios.post('/api/auth-otp', { action: 'send', phone: formattedPhone });
