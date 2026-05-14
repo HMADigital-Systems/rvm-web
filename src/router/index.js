@@ -11,6 +11,7 @@ import UserDashboard from "../pages/UserDashboard.vue";
 import WithdrawPage from "../pages/WithdrawPage.vue";
 import MachineDetailsPage from '../pages/MachineDetailsPage.vue';
 import ComingSoon from '../pages/ComingSoon.vue';
+import OnDemandCollection from '../pages/OnDemandCollection.vue';
 
 const routes = [
   { path: "/", component: Welcome, meta: { title: 'Welcome' } },
@@ -27,7 +28,7 @@ const routes = [
   { path: '/machine/:deviceNo', component: MachineDetailsPage, meta: { title: 'Machine Details' } },
   { path: '/mygreenshop', component: ComingSoon, meta: { title: 'MyGreenShop' } },
   { path: '/market', component: ComingSoon, meta: { title: 'Market' } },
-  { path: '/on-demand-collection', component: ComingSoon, meta: { title: 'On-Demand Collection' } },
+  { path: '/on-demand-collection', component: OnDemandCollection, meta: { title: 'On-Demand Collection' } },
 ];
 
 const router = createRouter({ history: createWebHistory(), routes });
