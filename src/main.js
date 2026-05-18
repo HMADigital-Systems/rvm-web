@@ -3,6 +3,10 @@ import './style.css'
 import App from './App.vue'
 import router from "./router";
 import { createI18n } from "vue-i18n";
+import { initErrorTracker, createVueErrorPlugin } from './services/error-tracker';
+
+// Initialize error tracker
+initErrorTracker({ project: 'rvm-web', apiUrl: 'https://rvm-merchant-platform-main.vercel.app/api/log-error' });
 
 import en from "./locales/en.json";
 import ms from "./locales/ms.json";

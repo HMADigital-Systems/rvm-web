@@ -51,8 +51,10 @@ export async function registerUserWithAutoGCM(token, phone, nickname = undefined
 
 // ✅ 2. Get User Records
 export async function getUserRecords(phone, pageNum = 1, pageSize = 10) {
+  // Convert international format (60165506664) to local (0165506664) for vendor API
+  const localPhone = phone.replace(/[^0-9]/g, '').replace(/^60/, '0');
   return await callApi('/api/open/v1/put', 'GET', {
-    phone: phone,
+    phone: localPhone,
     pageNum,
     pageSize
   });
