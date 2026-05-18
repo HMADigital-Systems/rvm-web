@@ -1,6 +1,6 @@
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { updateUserProfile } from "../services/autogcm.js"; 
+import { updateUserProfile, getUserRecords } from "../services/autogcm.js"; 
 import { supabase, getOrCreateUser } from "../services/supabase.js";
 
 export function useProfileLogic() {
@@ -151,30 +151,87 @@ export function useProfileLogic() {
                 user.value.avatar = dbUser.avatar_url || user.value.avatar;
                 user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
 
-                // 2. Fetch Financials (Securely via RPC)
-                const { data: financials } = await supabase.rpc('get_user_financial_data', { 
-                    p_user_id: dbUser.id 
-                });
+                // 2. Calculate Balance (fallback chain: vendor API > RPC > direct queries)
+                let calculatedBalance = 0;
+                
+                try {
+                    // ---- SOURCE 1: Vendor API (Most reliable) ----
+                    const vendorRes = await getUserRecords(phone, 1, 100);
+                    if (vendorRes.code === 200 && vendorRes.data && vendorRes.data.list) {
+                        const allPoints = vendorRes.data.list.reduce(
+                            (sum, item) => sum + (Number(item.integral) || 0), 0
+                        );
+                        const allWeight = vendorRes.data.list.reduce(
+                            (sum, item) => sum + (Number(item.weight) || 0), 0
+                        );
+                        
+                        if (allPoints > 0) {
+                            calculatedBalance = allPoints;
+                            user.value.totalWeight = allWeight.toFixed(2);
+                        }
+                    }
 
-                if (financials) {
-                    // 1. Calculate Spent (Correctly ignore Rejected withdrawals)
-                    const spent = (financials.withdrawals || [])
-                        .filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC') 
-                        .reduce((sum, w) => sum + Number(w.amount), 0);
+                    // ---- SOURCE 2: Supabase RPC + Direct queries (Fallback) ----
+                    if (calculatedBalance === 0) {
+                        try {
+                            const { data: financials } = await supabase.rpc('get_user_financial_data', {
+                                p_user_id: dbUser.id
+                            });
 
-                    // 2. Calculate Lifetime (Dynamically from history, like Home/Withdraw pages)
-                    // This ensures it catches your manual injections immediately
-                    const calculatedLifetime = (financials.submissions || [])
-                        .reduce((sum, s) => sum + Number(s.calculated_value || 0), 0);
-                    
-                    // 3. Final Balance
-                    user.value.points = (calculatedLifetime - spent).toFixed(2);
+                            if (financials) {
+                                const spent = (financials.withdrawals || [])
+                                    .filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC')
+                                    .reduce((sum, s) => sum + Number(s.amount), 0);
 
-                    // Update Cache
-                    localUser.cachedWeight = user.value.totalWeight;
-                    localUser.cachedBalance = user.value.points;
-                    localStorage.setItem("autogcmUser", JSON.stringify(localUser));
+                                const lifetime = (financials.submissions || [])
+                                    .reduce((sum, s) => sum + Number(s.calculated_value || 0), 0);
+
+                                calculatedBalance = Math.max(0, lifetime - spent);
+                            }
+                        } catch (rpcErr) {
+                            console.warn('RPC fallback failed:', rpcErr);
+                            
+                            try {
+                                const { data: submissions } = await supabase
+                                    .from('submission_reviews')
+                                    .select('calculated_value, status')
+                                    .eq('user_id', dbUser.user_id);
+
+                                if (submissions) {
+                                    calculatedBalance = submissions
+                                        .filter(s => s.status === 'VERIFIED')
+                                        .reduce((sum, s) => sum + Number(s.calculated_value || 0), 0);
+                                }
+                            } catch (directErr) {
+                                console.error('Direct query failed:', directErr);
+                            }
+                        }
+
+                        try {
+                            const { data: withdrawals } = await supabase
+                                .from('withdrawals')
+                                .select('amount, status')
+                                .eq('user_id', dbUser.id);
+
+                            const spent = (withdrawals || [])
+                                .filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC')
+                                .reduce((sum, w) => sum + Number(w.amount), 0);
+
+                            calculatedBalance = Math.max(0, calculatedBalance - spent);
+                        } catch (wErr) {
+                            console.warn('Withdrawal query failed:', wErr);
+                        }
+                    }
+
+                    user.value.points = calculatedBalance.toFixed(2);
+                } catch (e) {
+                    console.warn('Balance calc failed:', e);
                 }
+
+                // Update Cache
+                localUser.cachedWeight = user.value.totalWeight;
+                localUser.cachedBalance = user.value.points;
+                localStorage.setItem("autogcmUser", JSON.stringify(localUser));
             }
         } catch (e) { 
             console.error("Profile Load Error:", e); 

@@ -1,12 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { normalizePhone } from '../utils/phone-utils.js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error("⚠️ Supabase Keys missing in .env file!");
-}
+// Use VITE env vars if available (Vercel build), fallback to hardcoded defaults
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://aultuckuvussdyynglkj.supabase.co";
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_S9EulCL4BbZfmJft6Ly90g_03fxAe6u";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

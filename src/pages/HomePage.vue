@@ -52,6 +52,38 @@
       </div>
     </section>
 
+    <!-- On-Demand Collection Banner -->
+    <section class="px-4 mt-5">
+      <div 
+        @click="$router.push('/on-demand-collection')"
+        class="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-4 flex items-center justify-between shadow-md cursor-pointer active:scale-[0.98] transition-transform"
+      >
+        <div class="flex items-center gap-3">
+          <div class="bg-white/20 p-2.5 rounded-xl">
+            <Truck class="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <p class="text-white font-bold text-sm">On-Demand Collection</p>
+            <p class="text-white/80 text-[10px] mt-0.5">UCO min 50kg · Others we review</p>
+          </div>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    </section>
+
+    <!-- MyGreenShop Button -->
+    <section class="px-4 mt-3">
+      <button
+        @click="$router.push('/market')"
+        class="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-transform"
+      >
+        <ShoppingBag class="w-4 h-4" />
+        🏪 MyGreenShop — Spend your earnings
+      </button>
+    </section>
+
     <section class="px-4 mt-6">
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center space-x-2">
@@ -94,7 +126,7 @@ import Navbar from "../components/NavBar.vue";
 import RVMCard from "../components/RVMCard.vue";
 import RVMCardSkeleton from "../components/RVMCardSkeleton.vue"; 
 import UserGreeting from "../components/UserGreeting.vue";
-import { Recycle } from "lucide-vue-next";
+import { Recycle, Truck, ShoppingBag } from "lucide-vue-next";
 import { Swiper, SwiperSlide } from "swiper/vue";
 import { Autoplay, Pagination } from "swiper/modules";
 import "swiper/css";

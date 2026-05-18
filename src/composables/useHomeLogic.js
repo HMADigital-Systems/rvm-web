@@ -1,5 +1,5 @@
 import { ref, onMounted } from "vue";
-import { getMachineConfig, syncUser } from "../services/autogcm.js";
+import { getMachineConfig, syncUser, getUserRecords } from "../services/autogcm.js";
 import { supabase, getOrCreateUser } from "../services/supabase.js";
 
 const globalRvmList = ref([]); 
@@ -39,10 +39,16 @@ export function useHomeLogic() {
       },
       {
         device_no: "071582000002",
-        name: "RVM Taman Wawasan",
-        latitude: "3.0345254531656796",
-        longitude: "101.62379690201492",
-        address: "Balai Masyarakat MBSJ MPP Zon 16, Persiaran Wawasan, Taman Tasik Wawasan, Puchong"
+        name: "RVM Idaman Bukit Jelutong",
+        latitude: "3.109044006689492",
+        longitude: "101.57944063942551",
+        address: "Idaman Bukit Jelutong, Persiaran Anjung Seri, Seksyen U8, 40150 Shah Alam, Selangor"
+      },{
+        device_no: "071582000010",
+        name: "UCO Idaman Bukit Jelutong",
+        latitude: "3.109044006689492",
+        longitude: "101.57944063942551",
+        address: "Idaman Bukit Jelutong, Persiaran Anjung Seri, Seksyen U8, 40150 Shah Alam, Selangor"
       },
       {
         device_no: "071582000009",
@@ -294,28 +300,94 @@ export function useHomeLogic() {
                 user.value.avatar = dbUser.avatar_url || user.value.avatar;
                 user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
                 
-                const { data: financials } = await supabase.rpc('get_user_financial_data', { 
-                    p_user_id: dbUser.id 
-                });
+                // Calculate balance from multiple sources (fallback chain)
+                let calculatedBalance = 0;
+                let pendingEarn = 0;
 
-                if (financials) {
-                    // 1. Calculate Spent (Exclude Rejected withdrawals if they exist)
-                    const spent = (financials.withdrawals || [])
-                        .filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC') 
-                        .reduce((sum, w) => sum + Number(w.amount), 0);
-                    
-                    // 2. Calculate Pending
-                    const pending = (financials.submissions || [])
-                        .filter(s => s.status === 'PENDING')
-                        .reduce((sum, s) => sum + Number(s.machine_given_points), 0);
+                try {
+                    // ---- SOURCE 1: Vendor API (Most reliable - has real data) ----
+                    const vendorRes = await getUserRecords(user.value.phone, 1, 100);
+                    if (vendorRes.code === 200 && vendorRes.data && vendorRes.data.list) {
+                        const allPoints = vendorRes.data.list.reduce(
+                            (sum, item) => sum + (Number(item.integral) || 0), 0
+                        );
+                        const allWeight = vendorRes.data.list.reduce(
+                            (sum, item) => sum + (Number(item.weight) || 0), 0
+                        );
+                        
+                        if (allPoints > 0) {
+                            calculatedBalance = allPoints;
+                            user.value.totalWeight = allWeight.toFixed(2);
+                        }
+                    }
 
-                    const calculatedLifetime = (financials.submissions || [])
-                        .reduce((sum, s) => sum + Number(s.calculated_value || 0), 0);
-                    
-                    user.value.balance = (calculatedLifetime - spent).toFixed(2);
-                    user.value.pendingEarnings = pending.toFixed(2);
-                    
+                    // ---- SOURCE 2: Supabase (Fallback if vendor API fails) ----
+                    if (calculatedBalance === 0) {
+                        try {
+                            // Try via RPC first
+                            const { data: financials } = await supabase.rpc('get_user_financial_data', {
+                                p_user_id: dbUser.id
+                            });
+
+                            if (financials) {
+                                const spent = (financials.withdrawals || [])
+                                    .filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC')
+                                    .reduce((sum, s) => sum + Number(s.amount), 0);
+
+                                const lifetime = (financials.submissions || [])
+                                    .reduce((sum, s) => sum + Number(s.calculated_value || 0), 0);
+
+                                calculatedBalance = Math.max(0, lifetime - spent);
+
+                                pendingEarn = (financials.submissions || [])
+                                    .filter(s => s.status === 'PENDING')
+                                    .reduce((sum, s) => sum + Number(s.machine_given_points || 0), 0);
+                            }
+                        } catch (rpcErr) {
+                            console.warn('RPC fallback failed:', rpcErr);
+                            
+                            // Last resort: direct table queries
+                            try {
+                                const { data: submissions } = await supabase
+                                    .from('submission_reviews')
+                                    .select('calculated_value, status, machine_given_points')
+                                    .eq('user_id', dbUser.user_id);
+
+                                if (submissions) {
+                                    calculatedBalance = submissions
+                                        .filter(s => s.status === 'VERIFIED')
+                                        .reduce((sum, s) => sum + Number(s.calculated_value || 0), 0);
+                                    pendingEarn = submissions
+                                        .filter(s => s.status === 'PENDING')
+                                        .reduce((sum, s) => sum + Number(s.machine_given_points || 0), 0);
+                                }
+                            } catch (directErr) {
+                                console.error('Direct table query failed:', directErr);
+                            }
+                        }
+
+                        // Subtract withdrawals
+                        try {
+                            const { data: withdrawals } = await supabase
+                                .from('withdrawals')
+                                .select('amount, status')
+                                .eq('user_id', dbUser.id);
+
+                            const spent = (withdrawals || [])
+                                .filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC')
+                                .reduce((sum, w) => sum + Number(w.amount), 0);
+
+                            calculatedBalance = Math.max(0, calculatedBalance - spent);
+                        } catch (wErr) {
+                            console.warn('Withdrawal query failed:', wErr);
+                        }
+                    }
+
+                    user.value.balance = calculatedBalance.toFixed(2);
+                    user.value.pendingEarnings = pendingEarn.toFixed(2);
                     updateCache();
+                } catch (balanceErr) {
+                    console.error('Balance calc error:', balanceErr);
                 }
                 updateCache();
             }

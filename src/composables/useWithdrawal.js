@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { supabase, getOrCreateUser } from '../services/supabase'; 
+import { supabase, getOrCreateUser } from '../services/supabase';
+import { getUserRecords } from '../services/autogcm'; 
 
 export function useWithdrawal(phone) {
   const loading = ref(false);
@@ -35,21 +36,59 @@ export function useWithdrawal(phone) {
       if (!dbUser) throw new Error("User not found");
       userUuid.value = dbUser.id;
 
-      // 2. Fetch Financial Data via RPC (Bypasses RLS)
-      const { data, error } = await supabase.rpc('get_user_financial_data', {
-        p_user_id: userUuid.value
-      });
+      // 2. Fetch Financial Data (fallback chain: vendor API > Supabase)
+      let earnings = [];
+      let withdrawals = [];
+      let totalLifetimeCalc = 0;
+      
+      try {
+        // ---- SOURCE 1: Vendor API ----
+        const vendorRes = await getUserRecords(phone, 1, 100);
+        if (vendorRes.code === 200 && vendorRes.data && vendorRes.data.list) {
+          // Create merchant_id-based earnings from vendor API records
+          const vendorPoints = vendorRes.data.list.reduce(
+            (sum, item) => sum + (Number(item.integral) || 0), 0
+          );
+          if (vendorPoints > 0) {
+            // Vendor API has real data - create a simplified earnings entry
+            earnings = [{ merchant_id: 'vendor', calculated_value: vendorPoints, status: 'VERIFIED' }];
+            totalLifetimeCalc = vendorPoints;
+          }
+        }
+      } catch {}
 
-      if (error) throw error;
-
-      const earnings = data.submissions || [];
-      const withdrawals = data.withdrawals || [];
+      // ---- SOURCE 2: Supabase (Fallback if vendor API returned nothing) ----
+      if (earnings.length === 0) {
+        try {
+          // Try RPC first
+          const { data: financials } = await supabase.rpc('get_user_financial_data', {
+            p_user_id: dbUser.id
+          });
+          if (financials) {
+            earnings = (financials.submissions || []).filter(s => s.status === 'VERIFIED');
+            withdrawals = (financials.withdrawals || []).filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC');
+          }
+        } catch {
+          // Last resort: direct table queries
+          const { data: submissionsData } = await supabase
+            .from('submission_reviews')
+            .select('merchant_id, calculated_value, status')
+            .eq('user_id', dbUser.user_id);
+          
+          const { data: withdrawalsData } = await supabase
+            .from('withdrawals')
+            .select('merchant_id, amount, status')
+            .eq('user_id', userUuid.value);
+          
+          earnings = (submissionsData || []).filter(s => s.status === 'VERIFIED');
+          withdrawals = (withdrawalsData || []).filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC');
+        }
+      }
 
       // 3. Calculate Balances (Updated to Global Logic)
       const balances = {};
       
       // A. Sum up ALL Earnings
-      let totalLifetimeCalc = 0;
       earnings.forEach(item => {
         const mId = item.merchant_id;
         const pts = Number(item.calculated_value || 0);
