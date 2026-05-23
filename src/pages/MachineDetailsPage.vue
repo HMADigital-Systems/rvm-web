@@ -41,19 +41,17 @@
 
       <div v-if="isOnline" class="flex-1">
         <h3 class="text-gray-800 font-bold mb-4 text-lg flex items-center gap-2 px-1">
-          <span>🔓</span> {{ t('machine.select_door') }}
+          <span>📋</span> {{ t('machine.select_door') }}
         </h3>
         
         <div class="flex flex-col gap-4">
-          <button 
+          <div 
             v-for="bin in machineBins" 
             :key="bin.positionNo"
-            @click="initiateUnlock(bin)"
-            :disabled="bin.isFull"
-            class="relative group overflow-hidden rounded-2xl p-4 flex items-center transition-all duration-200 border-2 text-left shadow-sm active:scale-[0.98] bg-white"
+            class="relative overflow-hidden rounded-2xl p-4 flex items-center border-2 shadow-sm bg-white"
             :class="[
-              bin.isFull ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed grayscale' : 
-              bin.theme.border + ' hover:shadow-md hover:bg-opacity-50'
+              bin.isFull ? 'border-gray-100 bg-gray-50 opacity-60' : 
+              bin.theme.border
             ]"
           >
             <div class="w-20 h-20 flex-shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm mr-4 border border-gray-100 overflow-hidden relative" :class="bin.theme.bg">
@@ -91,12 +89,7 @@
                </p>
             </div>
 
-            <div v-if="!bin.isFull" class="ml-2 text-gray-300 group-hover:text-blue-500 transition-colors">
-               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-               </svg>
-            </div>
-          </button>
+          </div>
         </div>
       </div>
       
@@ -106,34 +99,7 @@
          <p class="text-xs text-gray-400 mt-1 px-8">We cannot connect to this machine right now.</p>
       </div>
 
-      <p class="text-center text-xs text-gray-400 mt-8 leading-relaxed max-w-xs mx-auto">
-        {{ t('machine.instruction') }}
-      </p>
-
-    </div> <div v-if="isOpening" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity">
-      <div class="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center">
-        <div class="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
-        <h3 class="text-lg font-bold text-gray-800">Processing...</h3>
-        <p class="text-sm text-gray-500 mt-1">Sending command to machine</p>
-      </div>
     </div>
-    
-
-    <ConfirmModal 
-      :isOpen="showConfirm"
-      :title="t('machine.confirm_title', { type: selectedBin?.translatedName })"
-      :message="t('machine.instruction')" 
-      @confirm="handleConfirmUnlock"
-      @cancel="showConfirm = false"
-    />
-
-    <StatusModal
-      :isOpen="showStatus.isOpen"
-      :type="showStatus.type"
-      :title="showStatus.title"
-      :message="showStatus.message"
-      @close="showStatus.isOpen = false"
-    />
 
   </div>
 </template>
@@ -141,13 +107,9 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { getMachineConfig, openRubbishPort } from "../services/autogcm.js";
+import { getMachineConfig } from "../services/autogcm.js";
 import { supabase } from "../services/supabase.js"; 
 import { useI18n } from "vue-i18n";
-
-// Components
-import ConfirmModal from "../components/ConfirmModal.vue";
-import StatusModal from "../components/StatusModal.vue";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -157,10 +119,6 @@ const isLoading = ref(true);
 const isOnline = ref(false);
 const address = ref("");
 const machineBins = ref([]);
-const showConfirm = ref(false);
-const selectedBin = ref(null);
-const showStatus = ref({ isOpen: false, type: 'error', title: '', message: '' });
-const isOpening = ref(false);
 
 // 🟢 UPDATED THEME HELPER WITH FLATICON LINKS
 const getBinTheme = (rawName) => {
@@ -265,69 +223,4 @@ onMounted(async () => {
     isLoading.value = false;
   }
 });
-
-const initiateUnlock = (bin) => {
-  const user = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-  if (!user.phone) {
-      showStatus.value = {
-        isOpen: true,
-        type: 'error',
-        title: 'Login Required',
-        message: 'Please login to use this machine.'
-      };
-      return;
-  }
-  selectedBin.value = bin;
-  showConfirm.value = true;
-};
-
-const handleConfirmUnlock = async () => {
-  showConfirm.value = false; 
-  isOpening.value = true; // START LOADING
-  
-  const user = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-
-  const payload = {
-      deviceNo: deviceNo,
-      phone: user.phone,
-      positionNo: selectedBin.value.positionNo
-  };
-  console.log("🔓 [REQUEST] Opening Door:", payload);
-  
-  try {
-    const res = await openRubbishPort(deviceNo, user.phone, selectedBin.value.positionNo);
-    
-    console.log("🔓 [RESPONSE] Server Output:", res);
-
-    if (res.code === 200) {
-        showStatus.value = {
-          isOpen: true,
-          type: 'success',
-          title: 'Opening Door...',
-          message: `The ${selectedBin.value.translatedName} door is opening now.`
-        };
-    } else {
-        let msg = res.msg || 'Unknown error';
-        if (msg.includes('设备响应服务超时') || msg.includes('timeout') || msg.includes('Bad Gateway')) {
-            msg = "The machine is not responding. It might be offline or busy. Please try again.";
-        }
-        showStatus.value = {
-          isOpen: true,
-          type: 'error',
-          title: 'Failed to Open',
-          message: msg
-        };
-    }
-  } catch (e) {
-    console.error("❌ [ERROR] Connection Failed:", e);
-    showStatus.value = {
-      isOpen: true,
-      type: 'error',
-      title: 'Connection Error',
-      message: 'Could not connect to the server. Please check your internet.'
-    };
-  } finally {
-    isOpening.value = false; // STOP LOADING (Always run this)
-  }
-};
 </script>
