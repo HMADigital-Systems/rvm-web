@@ -3,6 +3,7 @@
   "tagline": "智慧回收，赚取奖励",
   "get_started_button": "开始使用",
   "footer": "由 AutoGCM API 马来西亚提供支持",
+
   "login": {
     "welcome": "欢迎回来",
     "subtitle": "登录以继续智能回收。",
@@ -16,22 +17,12 @@
     "total_weight": "累计回收重量",
     "balance": "余额",
     "pending": "待处理",
-    "nearby": "附近站点",
-    "my_balance": "我的余额",
-    "quick_actions": "快捷操作",
-    "cash_out": "提现",
-    "activity": "活动记录",
-    "market": "MyGreenShop",
-    "scan_qr": "扫描二维码",
-    "achievements": "成就",
-    "earn_more": "回收更多以解锁下一个徽章"
+    "nearby": "附近站点"
   },
   "nav": {
     "home": "首页",
     "scan": "扫描",
-    "profile": "我的",
-    "activity": "活动",
-    "market": "MyGreenShop"
+    "profile": "我的"
   },
   "qr_scanner": {
     "title": "扫描二维码",
@@ -125,17 +116,17 @@
     "modal_ok": "好的，知道了"
   },
   "waste": {
-    "default": "回收物品",
-    "plastic_bottle": "塑料瓶",
-    "aluminium_can": "铝罐",
-    "tin_can": "铁罐",
-    "bottle": "瓶子",
-    "can": "罐子",
-    "uco": "废弃食用油",
-    "kertas": "纸张",
-    "plastik_aluminium": "塑料 / 铝罐"
-  },
-  "rvm": {
+  "default": "回收物品",
+  "plastic_bottle": "塑料瓶",
+  "aluminium_can": "铝罐",
+  "tin_can": "铁罐",
+  "bottle": "瓶子",
+  "can": "罐子",
+  "uco": "废弃食用油",
+  "kertas": "纸张",
+  "plastik_aluminium": "塑料 / 铝罐"
+},
+"rvm": {
     "status": {
       "online": "在线",
       "offline": "离线",

@@ -26,7 +26,8 @@ const routes = [
   { path: "/dashboard", component: UserDashboard, meta: { title: 'Dashboard' } },
   { path: "/withdraw", component: WithdrawPage, meta: { title: 'Withdraw Funds' } },
   { path: '/machine/:deviceNo', component: MachineDetailsPage, meta: { title: 'Machine Details' } },
-  { path: '/market', component: ComingSoon, meta: { title: 'MyGreenShop' } },
+  { path: '/mygreenshop', component: ComingSoon, meta: { title: 'MyGreenShop' } },
+  { path: '/market', component: ComingSoon, meta: { title: 'Market' } },
   { path: '/on-demand-collection', component: OnDemandCollection, meta: { title: 'On-Demand Collection' } },
 ];
 

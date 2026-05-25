@@ -39,23 +39,12 @@ export async function getUserByEmail(email) {
     const { data, error } = await supabase.rpc('get_user_by_email', {
       check_email: email
     });
-    if (!error && data) return Array.isArray(data) ? data[0] : data;
-    console.warn("getUserByEmail RPC error:", error?.message);
+    if (error) throw error;
+    return data || null;
   } catch (err) {
-    console.warn("getUserByEmail error:", err.message);
+    console.error("getUserByEmail Error:", err);
+    return null;
   }
-  
-  // FALLBACK: Direct table query
-  try {
-    const { data, error: qErr } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single();
-    if (!qErr && data) return data;
-  } catch (e) {}
-  
-  return null;
 }
 
 /**
@@ -63,41 +52,17 @@ export async function getUserByEmail(email) {
  */
 export async function getUserByPhone(phone) {
   if (!phone) return null;
-  
-  const phoneFormats = [
-    phone,
-    normalizePhone(phone),
-    String(phone).replace(/[^0-9]/g, ''),
-  ].filter((v, i, a) => v && a.indexOf(v) === i);
-  
-  for (const variant of phoneFormats) {
-    try {
-      const { data, error } = await supabase.rpc('get_user_by_phone', {
-        check_phone: variant
-      });
-      
-      if (!error && data) {
-        const user = Array.isArray(data) ? data[0] : data;
-        if (user && user.id) return user;
-      }
-    } catch (e) { /* try next */ }
+  try {
+    const normalized = normalizePhone(phone);
+    const { data, error } = await supabase.rpc('get_user_by_phone', {
+      check_phone: normalized
+    });
+    if (error) throw error;
+    return data || null;
+  } catch (err) {
+    console.error("getUserByPhone Error:", err);
+    return null;
   }
-  
-  // FALLBACK: Direct table query with multiple formats
-  for (const variant of phoneFormats) {
-    try {
-      const { data, error: qErr } = await supabase
-        .from('users')
-        .select('*')
-        .eq('phone', variant)
-        .single();
-      
-      if (!qErr && data) return data;
-    } catch (e) { /* try next */ }
-  }
-  
-  console.error("getUserByPhone: all methods failed");
-  return null;
 }
 
 /**
@@ -118,16 +83,12 @@ export async function upsertUserByEmail(email, { phone, nickname, avatarUrl, ful
       p_avatar_url: avatarUrl || '',
       p_full_name: fullName || ''
     });
-    if (!error && data) {
-      const user = Array.isArray(data) ? data[0] : data;
-      if (user && user.id) return user;
-    }
-    console.warn("upsertUserByEmail RPC error:", error?.message);
+    if (error) throw error;
+    return data || null;
   } catch (err) {
-    console.warn("upsertUserByEmail RPC error:", err.message);
+    console.error("upsertUserByEmail Error:", err);
+    throw err;
   }
-  
-  return null;
 }
 
 /**
@@ -159,52 +120,18 @@ export async function checkEmailPhoneConflict(email, phone) {
  * Now delegates internally via the improved upsert_user_by_phone RPC
  */
 export async function getOrCreateUser(phone, nickname = '', avatar = '', email = null) {
-  // Try multiple phone formats: raw, normalized, stripped of +60
-  const phoneFormats = [
-    phone,                                    // raw: 0126258882
-    normalizePhone(phone),                    // normalized: 60126258882
-    String(phone).replace(/[^0-9]/g, ''),     // digits only: 0126258882
-  ].filter((v, i, a) => v && a.indexOf(v) === i); // deduplicate
-  
-  let lastError = null;
-  
-  for (const variant of phoneFormats) {
-    try {
-      const { data, error } = await supabase.rpc('upsert_user_by_phone', {
-        p_phone: variant,
-        p_nickname: nickname || 'New User',
-        p_avatar_url: avatar,
-        p_email: email
-      });
-      
-      if (!error && data) {
-        const user = Array.isArray(data) ? data[0] : data;
-        // Only accept if we got real user data (not a new empty insert)
-        if (user && user.id) return user;
-      }
-      lastError = error;
-    } catch (err) {
-      lastError = err;
-    }
+  try {
+    const normalized = normalizePhone(phone);
+    const { data, error } = await supabase.rpc('upsert_user_by_phone', {
+      p_phone: normalized,
+      p_nickname: nickname || 'New User',
+      p_avatar_url: avatar,
+      p_email: email
+    });
+    if (error) throw error;
+    return data; 
+  } catch (err) {
+    console.error("User Sync Error:", err);
+    return null;
   }
-  
-  console.warn("RPC failed with all phone formats, falling back:", lastError?.message);
-  
-  // FALLBACK: Try direct table query with multiple formats
-  for (const variant of phoneFormats) {
-    try {
-      const { data: user, error: qErr } = await supabase
-        .from('users')
-        .select('*')
-        .eq('phone', variant)
-        .single();
-      
-      if (!qErr && user) return user;
-    } catch (e) {
-      // try next format
-    }
-  }
-  
-  console.error("All user lookup methods failed for all phone formats");
-  return null;
 }

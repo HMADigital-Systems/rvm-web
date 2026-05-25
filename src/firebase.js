@@ -2,14 +2,15 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 
-// ⭐ Using OLD Firebase project (rvm-auth-system) which already has app.mygreenplus.com authorized
+// ⭐ UPDATED Config to match your Project Settings exactly
 const firebaseConfig = {
-  apiKey: "AIzaSyA4BfOOkmtC1UYp8NDhG5CLffZgaNLvKBU",
-  authDomain: "rvm-auth-system.firebaseapp.com",
-  projectId: "rvm-auth-system",
-  storageBucket: "rvm-auth-system.firebasestorage.app",
-  messagingSenderId: "628987362418",
-  appId: "1:628987362418:web:6af14ac4c1c30544a1d6eb"
+  apiKey: "AIzaSyDY0PAA1OIyLvBqKz24r2sfezv6jNShuY0",
+  authDomain: "rvm-web-app.firebaseapp.com",
+  projectId: "rvm-web-app",
+  storageBucket: "rvm-web-app.firebasestorage.app",
+  messagingSenderId: "738705045695",
+  appId: "1:738705045695:web:cc8111ad8fa1bb5cd8ae0a",
+  measurementId: "G-FQ5QV62775" // Added this to match settings
 };
 
 // Initialize App

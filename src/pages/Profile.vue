@@ -12,7 +12,6 @@
       </div>
       <h2 class="text-xl font-semibold mt-3">{{ user.name }}</h2>
       <p class="text-sm text-green-100">{{ user.phone || t('profile.phone_not_set') }}</p>
-      <p v-if="user.mgpId" class="text-xs text-green-200 mt-1">MGP ID: {{ user.mgpId }}</p>
     </div>
 
     <div class="w-11/12 max-w-md bg-white rounded-2xl shadow p-6 mt-6 text-gray-700">
