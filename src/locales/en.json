@@ -3,7 +3,6 @@
   "tagline": "Recycle Smart, Earn Rewards",
   "get_started_button": "Get Started",
   "footer": "Powered by AutoGCM API Malaysia",
-  
   "login": {
     "welcome": "Welcome Back",
     "subtitle": "Login to continue recycling smarter.",
@@ -17,12 +16,22 @@
     "total_weight": "Total Delivered Weight",
     "balance": "Balance",
     "pending": "pending",
-    "nearby": "Nearby Stations"
+    "nearby": "Nearby Stations",
+    "my_balance": "My Balance",
+    "quick_actions": "Quick Actions",
+    "cash_out": "Cash Out",
+    "activity": "Activity",
+    "market": "MyGreenShop",
+    "scan_qr": "Scan QR",
+    "achievements": "Achievements",
+    "earn_more": "Recycle more to unlock next badge"
   },
   "nav": {
     "home": "Home",
     "scan": "Scan",
-    "profile": "Profile"
+    "profile": "Profile",
+    "activity": "Activity",
+    "market": "MyGreenShop"
   },
   "qr_scanner": {
     "title": "Scan QR Code",
@@ -116,18 +125,18 @@
     "modal_ok": "Okay, Got it"
   },
   "waste": {
-  "default": "Recycling Item",
-  "plastic_bottle": "Plastic Bottle",
-  "aluminium_can": "Aluminium Can",
-  "tin_can": "Tin Can",
-  "paper": "Paper",
-  "bottle": "Bottle",
-  "can": "Can",
-  "uco": "Used Cooking Oil",
-  "kertas": "Paper",
-  "plastik_aluminium": "Plastic / Aluminium"
-},
-"rvm": {
+    "default": "Recycling Item",
+    "plastic_bottle": "Plastic Bottle",
+    "aluminium_can": "Aluminium Can",
+    "tin_can": "Tin Can",
+    "paper": "Paper",
+    "bottle": "Bottle",
+    "can": "Can",
+    "uco": "Used Cooking Oil",
+    "kertas": "Paper",
+    "plastik_aluminium": "Plastic / Aluminium"
+  },
+  "rvm": {
     "status": {
       "online": "Online",
       "offline": "Offline",
@@ -139,8 +148,8 @@
       "bin_full": "Bin Full",
       "offline": "Offline"
     }
-},
-"odc": {
+  },
+  "odc": {
     "title": "On-Demand Collection",
     "subtitle": "We'll pick up your recyclables from your doorstep",
     "area_note_title": "📍 Klang Valley Only",

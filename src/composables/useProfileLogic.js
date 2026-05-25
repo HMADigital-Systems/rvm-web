@@ -13,6 +13,7 @@ export function useProfileLogic() {
   const user = ref({
     name: localUser.nikeName || "User",
     phone: localUser.phone || "",
+    mgpId: localUser.customer_id || "",
     // ✅ LOAD CACHE
     totalWeight: localUser.cachedWeight || null,
     points: localUser.cachedBalance || "0.00",
@@ -150,6 +151,7 @@ export function useProfileLogic() {
                 user.value.name = dbUser.nickname || user.value.name;
                 user.value.avatar = dbUser.avatar_url || user.value.avatar;
                 user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
+                user.value.mgpId = dbUser.customer_id || localUser.customer_id || '';
 
                 // 2. Calculate Balance (fallback chain: vendor API > RPC > direct queries)
                 let calculatedBalance = 0;

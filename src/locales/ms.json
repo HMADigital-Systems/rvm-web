@@ -3,7 +3,6 @@
   "tagline": "Kitar semula dengan bijak, raih ganjaran",
   "get_started_button": "Mula Sekarang",
   "footer": "Dikuasakan oleh AutoGCM API Malaysia",
-
   "login": {
     "welcome": "Selamat Kembali",
     "subtitle": "Log masuk untuk kitar semula dengan lebih bijak.",
@@ -17,12 +16,22 @@
     "total_weight": "Jumlah Berat Dihantar",
     "balance": "Baki",
     "pending": "tertangguh",
-    "nearby": "Stesen Berdekatan"
+    "nearby": "Stesen Berdekatan",
+    "my_balance": "Baki Saya",
+    "quick_actions": "Tindakan Pantas",
+    "cash_out": "Pengeluaran Tunai",
+    "activity": "Aktiviti",
+    "market": "MyGreenShop",
+    "scan_qr": "Imbas QR",
+    "achievements": "Pencapaian",
+    "earn_more": "Kitar semula lagi untuk capai lencana seterusnya"
   },
   "nav": {
     "home": "Utama",
     "scan": "Imbas",
-    "profile": "Profil"
+    "profile": "Profil",
+    "activity": "Aktiviti",
+    "market": "MyGreenShop"
   },
   "qr_scanner": {
     "title": "Imbas Kod QR",
@@ -116,17 +125,17 @@
     "modal_ok": "Okay, Faham"
   },
   "waste": {
-  "default": "Barang Kitar Semula",
-  "plastic_bottle": "Botol Plastik",
-  "aluminium_can": "Tin Aluminium",
-  "tin_can": "Tin Besi",
-  "bottle": "Botol",
-  "can": "Tin",
-  "uco": "Minyak Masak Terpakai",
-  "kertas": "Kertas",
-  "plastik_aluminium": "Plastik / Aluminium"
-},
-"rvm": {
+    "default": "Barang Kitar Semula",
+    "plastic_bottle": "Botol Plastik",
+    "aluminium_can": "Tin Aluminium",
+    "tin_can": "Tin Besi",
+    "bottle": "Botol",
+    "can": "Tin",
+    "uco": "Minyak Masak Terpakai",
+    "kertas": "Kertas",
+    "plastik_aluminium": "Plastik / Aluminium"
+  },
+  "rvm": {
     "status": {
       "online": "Dalam Talian",
       "offline": "Luar Talian",

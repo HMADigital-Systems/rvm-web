@@ -1,7 +1,7 @@
 import axios from "axios";
 
-// 🟢 VITE PROXY: Points to relative path so vite.config.js handles the forwarding
-const PROXY_URL = '/api/proxy';
+// 🟢 PROXY: Points to merchant platform backend which has valid vendor credentials
+const PROXY_URL = 'https://rvm-merchant-platform-main.vercel.app/api/proxy';
 
 // Generic Wrapper
 async function callApi(endpoint, method = 'GET', data = {}) {
@@ -35,23 +35,19 @@ export async function syncUser(phone, nickname = undefined, avatarUrl = undefine
   }
 
   // 🔴 FIX: FORCE Default Avatar for AutoGCM
-  // We ignore the 'avatarUrl' argument (which contains the Google Photo) 
-  // and send the clean default URL to the vendor.
   payload.avatarUrl = "https://lassification.oss-cn-shenzhen.aliyuncs.com/static/mini/imgv3/head.png";
 
   // 4. Send Request
   return await callApi('/api/open/v1/user/account/sync', 'POST', payload);
 }
 
-// Alias for registration flow - keeps compatibility with your other files
+// Alias for registration flow
 export async function registerUserWithAutoGCM(token, phone, nickname = undefined, avatarUrl = undefined) {
-  // Token is unused by machine API, we just pass the rest
   return await syncUser(phone, nickname, avatarUrl);
 }
 
 // ✅ 2. Get User Records
 export async function getUserRecords(phone, pageNum = 1, pageSize = 10) {
-  // Convert international format (60165506664) to local (0165506664) for vendor API
   const localPhone = phone.replace(/[^0-9]/g, '').replace(/^60/, '0');
   return await callApi('/api/open/v1/put', 'GET', {
     phone: localPhone,
@@ -95,7 +91,6 @@ export async function bindCard(deviceNo, phone) {
 // ✅ 7. Update User Profile
 export async function updateUserProfile(phone, newNickname, newAvatarUrl) {
   if (!phone) throw new Error("Phone number is required for update");
-  // We can reuse syncUser here since it handles the logic perfectly
   return await syncUser(phone, newNickname, newAvatarUrl);
 }
 
@@ -134,7 +129,6 @@ export async function getUserStats(phone) {
 // NEW: Onboarding / Migration Helper
 export async function runOnboarding(phone) {
   try {
-    // Ensure this URL matches your Backend deployment
     const BACKEND_URL = "https://rvm-merchant-platform.vercel.app/api/onboard"; 
     
     console.log("🔄 Triggering User Migration...");
