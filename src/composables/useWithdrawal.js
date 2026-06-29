@@ -42,17 +42,13 @@ export function useWithdrawal(phone) {
       let totalLifetimeCalc = 0;
       
       try {
-        // ---- SOURCE 1: Vendor API ----
-        const vendorRes = await getUserRecords(phone, 1, 100);
-        if (vendorRes.code === 200 && vendorRes.data && vendorRes.data.list) {
-          // Create merchant_id-based earnings from vendor API records
-          const vendorPoints = vendorRes.data.list.reduce(
-            (sum, item) => sum + (Number(item.integral) || 0), 0
-          );
-          if (vendorPoints > 0) {
-            // Vendor API has real data - create a simplified earnings entry
-            earnings = [{ merchant_id: 'vendor', calculated_value: vendorPoints, status: 'VERIFIED' }];
-            totalLifetimeCalc = vendorPoints;
+        // ---- SOURCE 1: Vendor API (Use account sync for accurate total) ----
+        const syncRes = await syncUser(phone);
+        if (syncRes.code === 200 && syncRes.data) {
+          const totalPoints = Number(syncRes.data.integral || 0);
+          if (totalPoints > 0) {
+            earnings = [{ merchant_id: 'vendor', calculated_value: totalPoints, status: 'VERIFIED' }];
+            totalLifetimeCalc = totalPoints;
           }
         }
       } catch {}

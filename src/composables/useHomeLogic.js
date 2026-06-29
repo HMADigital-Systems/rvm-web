@@ -306,18 +306,12 @@ export function useHomeLogic() {
 
                 try {
                     // ---- SOURCE 1: Vendor API (Most reliable - has real data) ----
-                    const vendorRes = await getUserRecords(user.value.phone, 1, 100);
-                    if (vendorRes.code === 200 && vendorRes.data && vendorRes.data.list) {
-                        const allPoints = vendorRes.data.list.reduce(
-                            (sum, item) => sum + (Number(item.integral) || 0), 0
-                        );
-                        const allWeight = vendorRes.data.list.reduce(
-                            (sum, item) => sum + (Number(item.weight) || 0), 0
-                        );
-                        
-                        if (allPoints > 0) {
-                            calculatedBalance = allPoints;
-                            user.value.totalWeight = allWeight.toFixed(2);
+                    // ---- SOURCE 1: Vendor API (Use account sync for accurate total) ----
+                    const syncRes = await syncUser(user.value.phone);
+                    if (syncRes.code === 200 && syncRes.data) {
+                        const totalPoints = Number(syncRes.data.integral || 0);
+                        if (totalPoints > 0) {
+                            calculatedBalance = totalPoints;
                         }
                     }
 

@@ -1,6 +1,6 @@
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { updateUserProfile, getUserRecords } from "../services/autogcm.js"; 
+import { updateUserProfile, getUserRecords, syncUser } from "../services/autogcm.js"; 
 import { supabase, getOrCreateUser } from "../services/supabase.js";
 
 export function useProfileLogic() {
@@ -157,19 +157,12 @@ export function useProfileLogic() {
                 let calculatedBalance = 0;
                 
                 try {
-                    // ---- SOURCE 1: Vendor API (Most reliable) ----
-                    const vendorRes = await getUserRecords(phone, 1, 100);
-                    if (vendorRes.code === 200 && vendorRes.data && vendorRes.data.list) {
-                        const allPoints = vendorRes.data.list.reduce(
-                            (sum, item) => sum + (Number(item.integral) || 0), 0
-                        );
-                        const allWeight = vendorRes.data.list.reduce(
-                            (sum, item) => sum + (Number(item.weight) || 0), 0
-                        );
-                        
-                        if (allPoints > 0) {
-                            calculatedBalance = allPoints;
-                            user.value.totalWeight = allWeight.toFixed(2);
+                    // ---- SOURCE 1: Vendor API (Use account sync for accurate total) ----
+                    const syncRes = await syncUser(phone);
+                    if (syncRes.code === 200 && syncRes.data) {
+                        const totalPoints = Number(syncRes.data.integral || 0);
+                        if (totalPoints > 0) {
+                            calculatedBalance = totalPoints;
                         }
                     }
 
