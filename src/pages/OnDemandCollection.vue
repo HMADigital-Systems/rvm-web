@@ -187,7 +187,7 @@ const wasteTypes = [
   { value: 'uco', label: t('odc.waste_uco'), icon: '🫒' },
   { value: 'ewaste', label: t('odc.waste_ewaste'), icon: '🔌' },
   { value: 'paper', label: t('odc.waste_paper'), icon: '📦' },
-  { value: 'glass', label: t('odc.waste_glass'), icon: '🍶' },
+  { value: 'clothes', label: t('odc.waste_clothes'), icon: '👕' },
 ]
 
 const form = ref({
